@@ -97,10 +97,27 @@ app.post('/api/auth/register', (req, res) => {
 
     const hashedPassword = hashPassword(password)
 
-    const result = db.prepare('INSERT INTO users (name, email, whatsapp, password, hash, status) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(name, email, whatsapp || '', hashedPassword, null, 'pending')
+    let userId
+    try {
+      const result = db.prepare('INSERT INTO users (name, email, whatsapp, password, hash, status) VALUES (?, ?, ?, ?, ?, ?)')
+        .run(name, email, whatsapp || '', hashedPassword, null, 'pending')
+      userId = result.lastInsertRowid
+    } catch (dbError) {
+      console.error('Failed to insert user:', dbError.message)
+      if (dbError.message.includes('NOT NULL') || dbError.message.includes('hash')) {
+        try {
+          const result = db.prepare('INSERT INTO users (name, email, whatsapp, password, status) VALUES (?, ?, ?, ?, ?)')
+            .run(name, email, whatsapp || '', hashedPassword, 'pending')
+          userId = result.lastInsertRowid
+        } catch (e2) {
+          console.error('Failed to insert user (fallback):', e2.message)
+          throw e2
+        }
+      } else {
+        throw dbError
+      }
+    }
 
-    const userId = result.lastInsertRowid
     const ip = req.ip || req.headers['x-forwarded-for'] || req.connection.remoteAddress || 'unknown'
     const userAgent = req.headers['user-agent'] || 'unknown'
 
@@ -112,8 +129,20 @@ app.post('/api/auth/register', (req, res) => {
       timezone
     }
 
-    const token = createSession(userId, deviceInfo)
-    logLogin(userId, deviceInfo)
+    let token
+    try {
+      token = createSession(userId, deviceInfo)
+    } catch (sessionError) {
+      console.error('Failed to create session:', sessionError.message)
+      db.prepare('DELETE FROM users WHERE id = ?').run(userId)
+      throw new Error('Failed to create session: ' + sessionError.message)
+    }
+
+    try {
+      logLogin(userId, deviceInfo)
+    } catch (logError) {
+      console.error('Failed to log login (non-critical):', logError.message)
+    }
 
     res.cookie('tubekit_session', token, {
       httpOnly: true,
@@ -124,7 +153,8 @@ app.post('/api/auth/register', (req, res) => {
     })
     res.json({ success: true })
   } catch (e) {
-    res.status(500).json({ error: 'Internal server error' })
+    console.error('Registration error:', e)
+    res.status(500).json({ error: 'Internal server error', details: process.env.NODE_ENV === 'development' ? e.message : undefined })
   }
 })
 

@@ -105,6 +105,35 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_login_history_timestamp ON login_history(timestamp);
 `)
 
+try {
+  const tableInfo = db.prepare("PRAGMA table_info(users)").all()
+  const hashColumn = tableInfo.find(col => col.name === 'hash')
+  if (hashColumn && hashColumn.notnull === 1) {
+    db.exec(`
+      PRAGMA foreign_keys=off;
+      BEGIN TRANSACTION;
+      CREATE TABLE users_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        email TEXT UNIQUE NOT NULL,
+        whatsapp TEXT,
+        password TEXT,
+        hash TEXT UNIQUE,
+        status TEXT DEFAULT 'pending',
+        wa_noti INTEGER DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      INSERT INTO users_new SELECT * FROM users;
+      DROP TABLE users;
+      ALTER TABLE users_new RENAME TO users;
+      COMMIT;
+      PRAGMA foreign_keys=on;
+    `)
+  }
+} catch (migrationError) {
+  console.error('Schema migration error (non-critical):', migrationError.message)
+}
+
 function getSerials() {
   return db.prepare(`
     SELECT s.*, p.name as platform_name, p.slug as platform_slug
