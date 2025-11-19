@@ -5,6 +5,7 @@ import './globals.css'
 function AdminPanel() {
   const [authStatus, setAuthStatus] = useState('loading')
   const [activeTab, setActiveTab] = useState('users')
+  const [userFilter, setUserFilter] = useState('all') // all, pending, approved, admin
   const [stats, setStats] = useState({})
   const [users, setUsers] = useState([])
   const [serials, setSerials] = useState([])
@@ -86,7 +87,7 @@ function AdminPanel() {
         return newState
       })
       loadData()
-      showToast(`User "${user?.name || 'User'}" approved with ${days} days free trial`, 'success')
+      showToast(`User "${user?.name || 'User'}" approved`, 'success')
     } catch (err) {
       console.error('Failed to approve user:', err)
       showToast('Failed to approve user: ' + err.message, 'error')
@@ -144,7 +145,7 @@ function AdminPanel() {
       setShowDeleteModal(false)
       setUserToDelete(null)
       loadData()
-      showToast(`User "${userToDelete.name}" deleted successfully`, 'success')
+      showToast(`User deleted successfully`, 'success')
     } catch (err) {
       console.error('Failed to delete user:', err)
       showToast('Failed to delete user: ' + err.message, 'error')
@@ -180,10 +181,10 @@ function AdminPanel() {
       setShowWhatsAppModal(false)
       setWhatsAppData({ userId: null, current: '' })
       loadData()
-      showToast('WhatsApp number updated successfully', 'success')
+      showToast('WhatsApp number updated', 'success')
     } catch (err) {
       console.error('Failed to update WhatsApp:', err)
-      showToast('Failed to update WhatsApp number', 'error')
+      showToast('Failed to update WhatsApp', 'error')
     }
   }
 
@@ -205,10 +206,10 @@ function AdminPanel() {
         return
       }
       loadData()
-      showToast(`WhatsApp notification ${!currentStatus ? 'enabled' : 'disabled'}`, 'success')
+      showToast(`Notification ${!currentStatus ? 'enabled' : 'disabled'}`, 'success')
     } catch (err) {
       console.error('Failed to toggle wa_noti:', err)
-      showToast('Failed to toggle WhatsApp notification', 'error')
+      showToast('Failed to toggle notification', 'error')
     }
   }
 
@@ -271,7 +272,7 @@ function AdminPanel() {
       setShowExtendPlanModal(false)
       setExtendPlanData({ userId: null, userName: '', days: '30' })
       loadData()
-      showToast(`Plan extended by ${daysNumber} days successfully`, 'success')
+      showToast(`Plan extended by ${daysNumber} days`, 'success')
     } catch (err) {
       console.error('Failed to extend plan:', err)
       showToast('Failed to extend plan: ' + err.message, 'error')
@@ -280,503 +281,656 @@ function AdminPanel() {
 
   if (authStatus === 'loading') {
     return (
-      <div className="admin-container">
-        <div className="admin-loading">Loading...</div>
+      <div className="saas-loading">
+        <div className="spinner"></div>
       </div>
     )
   }
 
   if (authStatus === 'unauthorized') {
     return (
-      <div className="admin-container">
-        <div className="admin-error">
-          <h1>Unauthorized</h1>
-          <p>You don't have admin access</p>
+      <div className="saas-unauthorized">
+        <div className="auth-card">
+          <h1 className="auth-title">Unauthorized</h1>
+          <p className="auth-subtitle">You don't have permission to access this area.</p>
         </div>
       </div>
     )
   }
 
+  // Filter logic
   const pendingUsers = users.filter(u => u.status === 'pending')
   const approvedUsers = users.filter(u => u.status === 'approved')
   const adminUsers = users.filter(u => u.status === 'admin')
 
+  let displayedUsers = users
+  if (userFilter === 'pending') displayedUsers = pendingUsers
+  if (userFilter === 'approved') displayedUsers = approvedUsers
+  if (userFilter === 'admin') displayedUsers = adminUsers
+
   return (
-    <div className="admin-container">
-      {/* Header */}
-      <div className="admin-header">
-        <div className="admin-brand">
-          <div className="admin-logo">T</div>
-          <div>
-            <div className="admin-title">TubeKit Admin</div>
-            <div className="admin-subtitle">System Dashboard</div>
+    <div className="saas-layout">
+      {/* Sidebar / Navigation */}
+      <aside className="saas-sidebar">
+        <div className="saas-brand">
+          <div className="saas-logo">TK</div>
+          <span className="saas-brand-name">TubeKit</span>
+        </div>
+        
+        <nav className="saas-nav">
+          <button 
+            className={`saas-nav-item ${activeTab === 'users' ? 'active' : ''}`}
+            onClick={() => setActiveTab('users')}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+              <circle cx="9" cy="7" r="4"></circle>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+              <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+            </svg>
+            Users
+          </button>
+          <button 
+            className={`saas-nav-item ${activeTab === 'serials' ? 'active' : ''}`}
+            onClick={() => setActiveTab('serials')}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+            </svg>
+            Serials
+          </button>
+        </nav>
+      </aside>
+
+      {/* Main Content */}
+      <main className="saas-main">
+        <header className="saas-header">
+          <h1 className="saas-page-title">
+            {activeTab === 'users' ? 'User Management' : 'Serial Analytics'}
+          </h1>
+          <div className="saas-user-menu">
+            <span className="saas-badge">Admin</span>
+          </div>
+        </header>
+
+        {/* Stats Overview */}
+        <div className="saas-stats-grid">
+          <div className="saas-stat-card">
+            <div className="saas-stat-icon blue">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+              </svg>
+            </div>
+            <div className="saas-stat-info">
+              <span className="saas-stat-label">Total Downloads</span>
+              <span className="saas-stat-value">{stats.totalDownloads || 0}</span>
+            </div>
+          </div>
+          <div className="saas-stat-card">
+            <div className="saas-stat-icon green">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
+                <polyline points="17 6 23 6 23 12"></polyline>
+              </svg>
+            </div>
+            <div className="saas-stat-info">
+              <span className="saas-stat-label">Downloads Today</span>
+              <span className="saas-stat-value">{stats.downloadsToday || 0}</span>
+            </div>
+          </div>
+          <div className="saas-stat-card">
+            <div className="saas-stat-icon purple">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                <line x1="16" y1="2" x2="16" y2="6"></line>
+                <line x1="8" y1="2" x2="8" y2="6"></line>
+                <line x1="3" y1="10" x2="21" y2="10"></line>
+              </svg>
+            </div>
+            <div className="saas-stat-info">
+              <span className="saas-stat-label">Last 7 Days</span>
+              <span className="saas-stat-value">{stats.downloadsLastWeek || 0}</span>
+            </div>
+          </div>
+          <div className="saas-stat-card">
+            <div className="saas-stat-icon orange">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                <circle cx="9" cy="7" r="4"></circle>
+              </svg>
+            </div>
+            <div className="saas-stat-info">
+              <span className="saas-stat-label">Total Users</span>
+              <span className="saas-stat-value">{users.length}</span>
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Stats */}
-      <div className="admin-stats">
-        <div className="admin-stat-card">
-          <div className="admin-stat-label">Total Downloads</div>
-          <div className="admin-stat-value">{stats.totalDownloads || 0}</div>
-        </div>
-        <div className="admin-stat-card">
-          <div className="admin-stat-label">Today</div>
-          <div className="admin-stat-value">{stats.downloadsToday || 0}</div>
-        </div>
-        <div className="admin-stat-card">
-          <div className="admin-stat-label">Last 7 Days</div>
-          <div className="admin-stat-value">{stats.downloadsLastWeek || 0}</div>
-        </div>
-        <div className="admin-stat-card">
-          <div className="admin-stat-label">Users</div>
-          <div className="admin-stat-value">{users.length}</div>
-        </div>
-      </div>
-
-      {/* Tabs */}
-      <div className="admin-tabs">
-        <button
-          className={`admin-tab ${activeTab === 'users' ? 'active' : ''}`}
-          onClick={() => setActiveTab('users')}
-        >
-          Users ({users.length})
-        </button>
-        <button
-          className={`admin-tab ${activeTab === 'serials' ? 'active' : ''}`}
-          onClick={() => setActiveTab('serials')}
-        >
-          Serials ({serials.length})
-        </button>
-      </div>
-
-      {/* Content */}
-      <div className="admin-content">
-        {activeTab === 'users' && (
-          <div className="admin-section">
-            {/* Pending Users */}
-            {pendingUsers.length > 0 && (
-              <div className="admin-subsection">
-                <div className="admin-subsection-title">
-                  Pending Approval ({pendingUsers.length})
-                </div>
-                <div className="admin-user-grid">
-                  {pendingUsers.map(user => (
-                    <div key={user.id} className="admin-user-card pending">
-                      <div className="admin-user-info">
-                        <div className="admin-user-name">{user.name}</div>
-                        <div className="admin-user-email">{user.email}</div>
-                        <div className="admin-user-whatsapp">
-                          {user.whatsapp || 'No WhatsApp'}
-                          <button
-                            className="admin-btn-small"
-                            onClick={() => showWhatsAppEdit(user.id, user.whatsapp)}
-                            title="Edit WhatsApp number"
-                          >
-                            Edit
-                          </button>
-                        </div>
-                        <div className="admin-user-wa-noti">
-                          WA Notification: {user.wa_noti ? 'Enabled' : 'Disabled'}
-                          <button
-                            className="admin-btn-small"
-                            onClick={() => toggleWaNoti(user.id, user.wa_noti)}
-                            title="Toggle WhatsApp notification"
-                          >
-                            {user.wa_noti ? 'Disable' : 'Enable'}
-                          </button>
-                        </div>
-                        <div className="admin-user-plan-days">
-                          <label>Free Trial Days:</label>
-                          <input
-                            type="number"
-                            min="1"
-                            value={planDays[user.id] || 3}
-                            onChange={(e) => {
-                              const val = e.target.value === '' ? '' : Number(e.target.value)
-                              if (val === '' || (val > 0 && val <= 365)) {
-                                setPlanDays(prev => ({ ...prev, [user.id]: val }))
-                              }
-                            }}
-                          />
-                        </div>
-                      </div>
-                      <div className="admin-user-actions">
-                        <button
-                          className="admin-btn approve"
-                          onClick={() => approveUser(user.id)}
-                        >
-                          Approve
-                        </button>
-                        <button
-                          className="admin-btn reject"
-                          onClick={() => rejectUser(user.id)}
-                        >
-                          Reject
-                        </button>
-                        <button
-                          className="admin-btn delete"
-                          onClick={() => showDeleteConfirmation(user.id, user.name)}
-                          title="Delete user permanently"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+        <div className="saas-content-area">
+          {activeTab === 'users' && (
+            <>
+              <div className="saas-filters">
+                <button 
+                  className={`saas-filter-btn ${userFilter === 'all' ? 'active' : ''}`}
+                  onClick={() => setUserFilter('all')}
+                >
+                  All Users
+                </button>
+                <button 
+                  className={`saas-filter-btn ${userFilter === 'pending' ? 'active' : ''}`}
+                  onClick={() => setUserFilter('pending')}
+                >
+                  Pending {pendingUsers.length > 0 && <span className="saas-count-badge warning">{pendingUsers.length}</span>}
+                </button>
+                <button 
+                  className={`saas-filter-btn ${userFilter === 'approved' ? 'active' : ''}`}
+                  onClick={() => setUserFilter('approved')}
+                >
+                  Active
+                </button>
+                <button 
+                  className={`saas-filter-btn ${userFilter === 'admin' ? 'active' : ''}`}
+                  onClick={() => setUserFilter('admin')}
+                >
+                  Admins
+                </button>
               </div>
-            )}
 
-            {/* Approved Users */}
-            {approvedUsers.length > 0 && (
-              <div className="admin-subsection">
-                <div className="admin-subsection-title">
-                  Approved Users ({approvedUsers.length})
-                </div>
-                <div className="admin-user-list">
-                  {approvedUsers.map(user => {
-                    const planExpired = user.plan_expiry_date ? new Date(user.plan_expiry_date) < new Date() : true
-                    const expiryDateStr = user.plan_expiry_date ? new Date(user.plan_expiry_date).toLocaleDateString() : 'Not set'
-                    
-                    return (
-                      <div key={user.id} className="admin-user-row">
-                        <div className="admin-user-info">
-                          <span className="admin-user-name">{user.name}</span>
-                          <span className="admin-user-email">{user.email}</span>
-                          <span className="admin-user-whatsapp">
-                            {user.whatsapp || 'No WhatsApp'}
-                            <button
-                              className="admin-btn-icon"
-                              onClick={() => showWhatsAppEdit(user.id, user.whatsapp)}
-                              title="Edit WhatsApp number"
-                            >
-                              ✎
-                            </button>
-                          </span>
-                          <span className="admin-user-wa-noti">
-                            WA: {user.wa_noti ? 'ON' : 'OFF'}
-                            <button
-                              className="admin-btn-icon"
-                              onClick={() => toggleWaNoti(user.id, user.wa_noti)}
-                              title="Toggle WhatsApp notification"
-                            >
-                              {user.wa_noti ? '✓' : '✗'}
-                            </button>
-                          </span>
-                          <span style={{ 
-                            fontSize: '12px', 
-                            fontWeight: '600',
-                            color: planExpired ? '#ef4444' : '#10b981',
-                            background: planExpired ? '#fee2e2' : '#d1fae5',
-                            padding: '4px 10px',
-                            borderRadius: '12px'
-                          }}>
-                            {planExpired ? '🔴 Expired' : '🟢 Active'} • {expiryDateStr}
-                          </span>
-                        </div>
-                        <div className="admin-user-meta">
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '12px', color: '#64748b' }}>
-                            <span className="admin-user-downloads">
-                              {user.totalDownloads || 0} downloads
-                            </span>
-                            <span className="admin-user-login-stats">
-                              {user.total_logins || 0} logins • {user.unique_devices || 0} devices • {user.unique_ips || 0} IPs
-                            </span>
+              {/* Desktop Table View */}
+              <div className="saas-table-wrapper">
+                <table className="saas-table">
+                  <thead>
+                    <tr>
+                      <th>User</th>
+                      <th>Status</th>
+                      <th>WhatsApp</th>
+                      <th>Notifications</th>
+                      <th>Activity</th>
+                      <th className="text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {displayedUsers.map(user => {
+                      const isPending = user.status === 'pending'
+                      const planExpired = user.plan_expiry_date ? new Date(user.plan_expiry_date) < new Date() : true
+                      const expiryDateStr = user.plan_expiry_date ? new Date(user.plan_expiry_date).toLocaleDateString() : '-'
+                      
+                      return (
+                        <tr key={user.id}>
+                          <td>
+                            <div className="saas-user-cell">
+                              <div className="saas-user-avatar">{user.name.charAt(0).toUpperCase()}</div>
+                              <div className="saas-user-details">
+                                <span className="saas-user-name">{user.name}</span>
+                                <span className="saas-user-email">{user.email}</span>
+                              </div>
+                            </div>
+                          </td>
+                          <td>
+                            {isPending ? (
+                              <span className="saas-status-badge warning">Pending</span>
+                            ) : user.status === 'admin' ? (
+                              <span className="saas-status-badge info">Admin</span>
+                            ) : (
+                              <div className="saas-plan-info">
+                                <span className={`saas-status-badge ${planExpired ? 'danger' : 'success'}`}>
+                                  {planExpired ? 'Expired' : 'Active'}
+                                </span>
+                                <span className="saas-plan-date">{expiryDateStr}</span>
+                              </div>
+                            )}
+                          </td>
+                          <td>
+                            <div className="saas-wa-cell">
+                              <span className="saas-wa-number">{user.whatsapp || '-'}</span>
+                              <button 
+                                className="saas-btn-icon small" 
+                                onClick={() => showWhatsAppEdit(user.id, user.whatsapp)} 
+                                title="Edit WhatsApp"
+                              >
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                </svg>
+                              </button>
+                            </div>
+                          </td>
+                          <td>
+                            <div className="saas-noti-cell">
+                              <span className={`saas-status-badge ${user.wa_noti ? 'success' : 'danger'}`}>
+                                {user.wa_noti ? 'Enabled' : 'Disabled'}
+                              </span>
+                              <button 
+                                className="saas-btn-icon small" 
+                                onClick={() => toggleWaNoti(user.id, user.wa_noti)}
+                                title={user.wa_noti ? 'Disable Notifications' : 'Enable Notifications'}
+                              >
+                                {user.wa_noti ? (
+                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                                    <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                                  </svg>
+                                ) : (
+                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                                    <line x1="13.73" y1="21" x2="10.27" y2="21"></line>
+                                    <line x1="1" y1="1" x2="23" y2="23"></line>
+                                  </svg>
+                                )}
+                              </button>
+                            </div>
+                          </td>
+                          <td>
+                            <div className="saas-activity-cell">
+                              <span>{user.totalDownloads || 0} DLs</span>
+                              <span className="sub">{user.total_logins || 0} logins</span>
+                            </div>
+                          </td>
+                          <td>
+                            <div className="saas-actions-cell">
+                              {isPending ? (
+                                <>
+                                  <div className="saas-trial-input">
+                                    <input
+                                      type="number"
+                                      min="1"
+                                      placeholder="3"
+                                      value={planDays[user.id] || ''}
+                                      onChange={(e) => setPlanDays(prev => ({ ...prev, [user.id]: Number(e.target.value) }))}
+                                    />
+                                    <span>days</span>
+                                  </div>
+                                  <button className="saas-btn-icon success" onClick={() => approveUser(user.id)} title="Approve">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                      <polyline points="20 6 9 17 4 12"></polyline>
+                                    </svg>
+                                  </button>
+                                  <button className="saas-btn-icon danger" onClick={() => rejectUser(user.id)} title="Reject">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                      <line x1="18" y1="6" x2="6" y2="18"></line>
+                                      <line x1="6" y1="6" x2="18" y2="18"></line>
+                                    </svg>
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  <button className="saas-btn-icon primary" onClick={() => showExtendPlan(user.id, user.name)} title="Extend Plan">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                      <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                                    </svg>
+                                  </button>
+                                  <button className="saas-btn-icon" onClick={() => loadLoginHistory(user.id, user.name)} title="History">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                      <circle cx="12" cy="12" r="10"></circle>
+                                      <polyline points="12 6 12 12 16 14"></polyline>
+                                    </svg>
+                                  </button>
+                                </>
+                              )}
+                              <button className="saas-btn-icon danger" onClick={() => showDeleteConfirmation(user.id, user.name)} title="Delete">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                  <polyline points="3 6 5 6 21 6"></polyline>
+                                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                </svg>
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                    {displayedUsers.length === 0 && (
+                      <tr>
+                        <td colSpan="6" className="saas-empty-state">
+                          No users found
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile Card View */}
+              <div className="saas-mobile-cards">
+                {displayedUsers.map(user => {
+                  const isPending = user.status === 'pending'
+                  const planExpired = user.plan_expiry_date ? new Date(user.plan_expiry_date) < new Date() : true
+                  const expiryDateStr = user.plan_expiry_date ? new Date(user.plan_expiry_date).toLocaleDateString() : '-'
+                  
+                  return (
+                    <div key={user.id} className="saas-mobile-card">
+                      <div className="saas-mobile-card-header">
+                        <div className="saas-user-cell">
+                          <div className="saas-user-avatar">{user.name.charAt(0).toUpperCase()}</div>
+                          <div className="saas-user-details">
+                            <span className="saas-user-name">{user.name}</span>
+                            <span className="saas-user-email">{user.email}</span>
                           </div>
-                          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                            <button
-                              className="admin-btn-icon"
-                              onClick={() => showExtendPlan(user.id, user.name)}
-                              title="Extend plan"
-                              style={{ background: '#10b981', color: 'white', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: '500' }}
-                            >
-                              Extend
-                            </button>
-                            <button
-                              className="admin-btn-icon"
-                              onClick={() => loadLoginHistory(user.id, user.name)}
-                              title="View login history"
-                            >
-                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <path d="M3 3h18v18H3zM9 9h6M9 15h6M9 12h6"/>
+                        </div>
+                        <div>
+                          {isPending ? (
+                            <span className="saas-status-badge warning">Pending</span>
+                          ) : user.status === 'admin' ? (
+                            <span className="saas-status-badge info">Admin</span>
+                          ) : (
+                            <div className="saas-plan-info">
+                              <span className={`saas-status-badge ${planExpired ? 'danger' : 'success'}`}>
+                                {planExpired ? 'Expired' : 'Active'}
+                              </span>
+                              <span className="saas-plan-date">{expiryDateStr}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div className="saas-mobile-card-body">
+                        <div className="saas-mobile-two-col">
+                          <div className="saas-mobile-col">
+                            <span className="saas-mobile-label">WhatsApp</span>
+                            <div className="saas-wa-cell">
+                              <span className="saas-wa-number">{user.whatsapp || '-'}</span>
+                              <button 
+                                className="saas-btn-icon small" 
+                                onClick={() => showWhatsAppEdit(user.id, user.whatsapp)} 
+                                title="Edit WhatsApp"
+                              >
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                </svg>
+                              </button>
+                            </div>
+                          </div>
+                          <div className="saas-mobile-col">
+                            <span className="saas-mobile-label">Notifications</span>
+                            <div className="saas-noti-cell">
+                              <span className={`saas-status-badge ${user.wa_noti ? 'success' : 'danger'}`}>
+                                {user.wa_noti ? 'Enabled' : 'Disabled'}
+                              </span>
+                              <button 
+                                className="saas-btn-icon small" 
+                                onClick={() => toggleWaNoti(user.id, user.wa_noti)}
+                                title={user.wa_noti ? 'Disable Notifications' : 'Enable Notifications'}
+                              >
+                                {user.wa_noti ? (
+                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                                    <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                                  </svg>
+                                ) : (
+                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                                    <line x1="13.73" y1="21" x2="10.27" y2="21"></line>
+                                    <line x1="1" y1="1" x2="23" y2="23"></line>
+                                  </svg>
+                                )}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div className="saas-mobile-row">
+                          <span className="saas-mobile-label">Activity</span>
+                          <div className="saas-activity-cell">
+                            <span>{user.totalDownloads || 0} DLs</span>
+                            <span className="sub">{user.total_logins || 0} logins</span>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div className="saas-mobile-card-footer">
+                        {isPending ? (
+                          <>
+                            <div className="saas-trial-input">
+                              <input
+                                type="number"
+                                min="1"
+                                placeholder="3"
+                                value={planDays[user.id] || ''}
+                                onChange={(e) => setPlanDays(prev => ({ ...prev, [user.id]: Number(e.target.value) }))}
+                              />
+                              <span>days</span>
+                            </div>
+                            <button className="saas-btn-icon success" onClick={() => approveUser(user.id)} title="Approve">
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <polyline points="20 6 9 17 4 12"></polyline>
                               </svg>
                             </button>
-                            <button
-                              className="admin-btn-icon delete"
-                              onClick={() => showDeleteConfirmation(user.id, user.name)}
-                              title="Delete user"
-                            >
-                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <button className="saas-btn-icon danger" onClick={() => rejectUser(user.id)} title="Reject">
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <line x1="18" y1="6" x2="6" y2="18"></line>
+                                <line x1="6" y1="6" x2="18" y2="18"></line>
+                              </svg>
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button className="saas-btn-icon primary" onClick={() => showExtendPlan(user.id, user.name)} title="Extend Plan">
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                              </svg>
+                            </button>
+                            <button className="saas-btn-icon" onClick={() => loadLoginHistory(user.id, user.name)} title="History">
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <polyline points="12 6 12 12 16 14"></polyline>
+                              </svg>
+                            </button>
+                            <button className="saas-btn-icon danger" onClick={() => showDeleteConfirmation(user.id, user.name)} title="Delete">
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                 <polyline points="3 6 5 6 21 6"></polyline>
                                 <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
                               </svg>
                             </button>
-                          </div>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Admin Users */}
-            {adminUsers.length > 0 && (
-              <div className="admin-subsection">
-                <div className="admin-subsection-title">
-                  Administrators ({adminUsers.length})
-                </div>
-                <div className="admin-user-list">
-                  {adminUsers.map(user => (
-                    <div key={user.id} className="admin-user-row admin">
-                      <div className="admin-user-info">
-                        <span className="admin-user-name">{user.name}</span>
-                        <span className="admin-user-email">{user.email}</span>
-                      </div>
-                      <div className="admin-user-meta">
-                        <span className="admin-badge">Admin</span>
+                          </>
+                        )}
                       </div>
                     </div>
-                  ))}
-                </div>
+                  )
+                })}
+                {displayedUsers.length === 0 && (
+                  <div className="saas-empty-state">
+                    No users found
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        )}
+            </>
+          )}
 
-        {activeTab === 'serials' && (
-          <div className="admin-section">
-            <div className="admin-subsection">
-              <div className="admin-subsection-title">
-                Top Downloading Serials ({serials.length} total)
+          {activeTab === 'serials' && (
+            <>
+              {/* Desktop Table View */}
+              <div className="saas-table-wrapper">
+                <table className="saas-table">
+                  <thead>
+                    <tr>
+                      <th>Serial Name</th>
+                      <th>Platform</th>
+                      <th>Total Downloads</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {serials.slice(serialsPage * 30, (serialsPage + 1) * 30).map(serial => (
+                      <tr key={serial.id}>
+                        <td className="font-medium">{serial.name}</td>
+                        <td>
+                          <span className="saas-platform-badge">{serial.platform_name}</span>
+                        </td>
+                        <td>{serial.totalDownloads || 0}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {serials.length > 30 && (
+                  <div className="saas-pagination">
+                    <button
+                      onClick={() => setSerialsPage(Math.max(0, serialsPage - 1))}
+                      disabled={serialsPage === 0}
+                    >
+                      Previous
+                    </button>
+                    <span>Page {serialsPage + 1}</span>
+                    <button
+                      onClick={() => setSerialsPage(Math.min(Math.ceil(serials.length / 30) - 1, serialsPage + 1))}
+                      disabled={serialsPage >= Math.ceil(serials.length / 30) - 1}
+                    >
+                      Next
+                    </button>
+                  </div>
+                )}
               </div>
-              <div className="admin-serial-list">
+
+              {/* Mobile Card View */}
+              <div className="saas-mobile-cards">
                 {serials.slice(serialsPage * 30, (serialsPage + 1) * 30).map(serial => (
-                  <div key={serial.id} className="admin-serial-row">
-                    <div className="admin-serial-info">
-                      <span className="admin-serial-name">{serial.name}</span>
-                      <span className="admin-serial-platform">{serial.platform_name}</span>
+                  <div key={serial.id} className="saas-mobile-card">
+                    <div className="saas-mobile-card-header">
+                      <span className="saas-user-name">{serial.name}</span>
                     </div>
-                    <div className="admin-serial-meta">
-                      <span className="admin-serial-downloads">
-                        {serial.totalDownloads || 0} downloads
-                      </span>
+                    <div className="saas-mobile-card-body">
+                      <div className="saas-mobile-row">
+                        <span className="saas-mobile-label">Platform</span>
+                        <span className="saas-platform-badge">{serial.platform_name}</span>
+                      </div>
+                      <div className="saas-mobile-row">
+                        <span className="saas-mobile-label">Downloads</span>
+                        <span>{serial.totalDownloads || 0}</span>
+                      </div>
                     </div>
                   </div>
                 ))}
+                {serials.length > 30 && (
+                  <div className="saas-pagination">
+                    <button
+                      onClick={() => setSerialsPage(Math.max(0, serialsPage - 1))}
+                      disabled={serialsPage === 0}
+                    >
+                      Previous
+                    </button>
+                    <span>Page {serialsPage + 1}</span>
+                    <button
+                      onClick={() => setSerialsPage(Math.min(Math.ceil(serials.length / 30) - 1, serialsPage + 1))}
+                      disabled={serialsPage >= Math.ceil(serials.length / 30) - 1}
+                    >
+                      Next
+                    </button>
+                  </div>
+                )}
               </div>
-              {serials.length > 30 && (
-                <div className="admin-pagination">
-                  <button
-                    className="admin-btn"
-                    onClick={() => setSerialsPage(Math.max(0, serialsPage - 1))}
-                    disabled={serialsPage === 0}
-                  >
-                    Previous
-                  </button>
-                  <span className="admin-pagination-info">
-                    Page {serialsPage + 1} of {Math.ceil(serials.length / 30)}
-                  </span>
-                  <button
-                    className="admin-btn"
-                    onClick={() => setSerialsPage(Math.min(Math.ceil(serials.length / 30) - 1, serialsPage + 1))}
-                    disabled={serialsPage >= Math.ceil(serials.length / 30) - 1}
-                  >
-                    Next
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
+            </>
+          )}
+        </div>
+      </main>
 
+      {/* Modals */}
       {showLoginHistory && (
-        <div className="modal-bg show">
-          <div className="modal" style={{ maxWidth: '800px', maxHeight: '80vh', overflow: 'auto' }}>
-            <button className="modal-close" onClick={() => setShowLoginHistory(false)}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
-              </svg>
-            </button>
-            <div className="modal-hdr">
-              <div className="modal-title">Login History</div>
-              <div className="modal-subtitle">{selectedUserName ? `Complete login timeline for ${selectedUserName}` : 'Complete login timeline for user'}</div>
+        <div className="saas-modal-overlay">
+          <div className="saas-modal large">
+            <div className="saas-modal-header">
+              <h3>Login History</h3>
+              <button onClick={() => setShowLoginHistory(false)}>✕</button>
             </div>
-            <div style={{ padding: '20px' }}>
-              {loginHistory.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>No login history found</div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {loginHistory.map((entry, idx) => (
-                    <div key={entry.id || idx} style={{ padding: '16px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '8px' }}>
-                        <div style={{ fontWeight: '600', color: '#1e293b' }}>
-                          {new Date(entry.timestamp).toLocaleString()}
-                        </div>
+            <div className="saas-modal-content scrollable">
+              <div className="saas-timeline">
+                {loginHistory.map((entry, idx) => (
+                  <div key={idx} className="saas-timeline-item">
+                    <div className="saas-timeline-date">
+                      {new Date(entry.timestamp).toLocaleString()}
+                    </div>
+                    <div className="saas-timeline-details">
+                      <div className="saas-timeline-row">
+                        <span>IP: {entry.ip}</span>
+                        <span>Device: {entry.device_fingerprint?.substring(0, 12)}...</span>
                       </div>
-                      <div style={{ fontSize: '13px', color: '#64748b', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                        <div><strong>IP:</strong> {entry.ip || 'N/A'}</div>
-                        <div><strong>Device:</strong> {entry.device_fingerprint ? entry.device_fingerprint.substring(0, 16) + '...' : 'N/A'}</div>
-                        <div><strong>Screen:</strong> {entry.screen_resolution || 'N/A'}</div>
-                        <div><strong>Timezone:</strong> {entry.timezone || 'N/A'}</div>
-                      </div>
-                      <div style={{ marginTop: '8px', fontSize: '12px', color: '#94a3b8' }}>
-                        <strong>User Agent:</strong> {entry.user_agent || 'N/A'}
+                      <div className="saas-timeline-meta">
+                        {entry.user_agent}
                       </div>
                     </div>
-                  ))}
-                </div>
-              )}
+                  </div>
+                ))}
+                {loginHistory.length === 0 && <p className="text-center text-muted">No history available</p>}
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Delete Confirmation Modal */}
       {showDeleteModal && (
-        <div className="modal-bg show">
-          <div className="modal" style={{ maxWidth: '420px' }}>
-            <button className="modal-close" onClick={() => { setShowDeleteModal(false); setUserToDelete(null) }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
-              </svg>
-            </button>
-            <div className="modal-hdr">
-              <div className="modal-icon error">
-                <svg viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="10"></circle>
-                  <line x1="15" y1="9" x2="9" y2="15"></line>
-                  <line x1="9" y1="9" x2="15" y2="15"></line>
-                </svg>
-              </div>
-              <div className="modal-title">Delete User</div>
-              <div className="modal-subtitle">Are you sure you want to delete "{userToDelete?.name}"? This action cannot be undone.</div>
+        <div className="saas-modal-overlay">
+          <div className="saas-modal small">
+            <div className="saas-modal-header">
+              <h3>Confirm Deletion</h3>
+              <button onClick={() => { setShowDeleteModal(false); setUserToDelete(null) }}>✕</button>
             </div>
-            <div className="confirm-actions">
-              <button className="confirm-btn cancel" onClick={() => { setShowDeleteModal(false); setUserToDelete(null) }}>
-                Cancel
-              </button>
-              <button className="confirm-btn delete" onClick={deleteUser}>
-                Delete
-              </button>
+            <div className="saas-modal-content">
+              <p>Are you sure you want to delete <strong>{userToDelete?.name}</strong>? This action cannot be undone.</p>
+              <div className="saas-modal-actions">
+                <button className="saas-btn secondary" onClick={() => { setShowDeleteModal(false); setUserToDelete(null) }}>Cancel</button>
+                <button className="saas-btn danger" onClick={deleteUser}>Delete User</button>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* WhatsApp Edit Modal */}
       {showWhatsAppModal && (
-        <div className="modal-bg show">
-          <div className="modal" style={{ maxWidth: '420px' }}>
-            <button className="modal-close" onClick={() => { setShowWhatsAppModal(false); setWhatsAppData({ userId: null, current: '' }) }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
-              </svg>
-            </button>
-            <div className="modal-hdr">
-              <div className="modal-icon">
-                <svg viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
-                </svg>
-              </div>
-              <div className="modal-title">Edit WhatsApp Number</div>
-              <div className="modal-subtitle">Update the WhatsApp number for this user</div>
+        <div className="saas-modal-overlay">
+          <div className="saas-modal small">
+            <div className="saas-modal-header">
+              <h3>Update WhatsApp</h3>
+              <button onClick={() => { setShowWhatsAppModal(false); setWhatsAppData({ userId: null, current: '' }) }}>✕</button>
             </div>
-            <div style={{ marginTop: '24px' }}>
-              <div className="auth-field">
-                <label className="auth-label">WhatsApp Number</label>
+            <div className="saas-modal-content">
+              <div className="saas-form-group">
+                <label>WhatsApp Number</label>
                 <input
                   type="text"
-                  className="auth-input"
                   value={whatsAppData.current}
                   onChange={(e) => setWhatsAppData(prev => ({ ...prev, current: e.target.value }))}
-                  placeholder="Enter WhatsApp number"
+                  placeholder="+1234567890"
                   autoFocus
                 />
               </div>
-              <div className="confirm-actions" style={{ marginTop: '24px' }}>
-                <button className="confirm-btn cancel" onClick={() => { setShowWhatsAppModal(false); setWhatsAppData({ userId: null, current: '' }) }}>
-                  Cancel
-                </button>
-                <button className="confirm-btn" style={{ background: 'var(--accent)', borderColor: 'var(--accent)', color: 'white' }} onClick={updateWhatsApp}>
-                  Update
-                </button>
+              <div className="saas-modal-actions">
+                <button className="saas-btn secondary" onClick={() => { setShowWhatsAppModal(false); setWhatsAppData({ userId: null, current: '' }) }}>Cancel</button>
+                <button className="saas-btn primary" onClick={updateWhatsApp}>Update</button>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Extend Plan Modal */}
       {showExtendPlanModal && (
-        <div className="modal-bg show">
-          <div className="modal" style={{ maxWidth: '420px' }}>
-            <button className="modal-close" onClick={() => { setShowExtendPlanModal(false); setExtendPlanData({ userId: null, userName: '', days: '30' }) }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
-              </svg>
-            </button>
-            <div className="modal-hdr">
-              <div className="modal-icon" style={{ background: 'linear-gradient(135deg, #10b981, #059669)' }}>
-                <svg viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" stroke="white">
-                  <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
-                </svg>
-              </div>
-              <div className="modal-title">Extend Plan</div>
-              <div className="modal-subtitle">Extend plan for {extendPlanData.userName}</div>
+        <div className="saas-modal-overlay">
+          <div className="saas-modal small">
+            <div className="saas-modal-header">
+              <h3>Extend Plan</h3>
+              <button onClick={() => { setShowExtendPlanModal(false); setExtendPlanData({ userId: null, userName: '', days: '30' }) }}>✕</button>
             </div>
-            <div style={{ marginTop: '24px' }}>
-              <div className="auth-field">
-                <label className="auth-label">Number of Days</label>
+            <div className="saas-modal-content">
+              <div className="saas-form-group">
+                <label>Add Days</label>
                 <input
                   type="number"
-                  min="1"
-                  className="auth-input"
                   value={extendPlanData.days}
                   onChange={(e) => setExtendPlanData(prev => ({ ...prev, days: e.target.value }))}
-                  placeholder="Enter days (e.g., 30, 60)"
+                  min="1"
                   autoFocus
                 />
               </div>
-              <div style={{ marginTop: '12px', padding: '12px', background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: '8px', fontSize: '13px', color: '#10b981' }}>
-                💡 Common plans: 30 days (1 month) or 60 days (2 months)
-              </div>
-              <div className="confirm-actions" style={{ marginTop: '24px' }}>
-                <button className="confirm-btn cancel" onClick={() => { setShowExtendPlanModal(false); setExtendPlanData({ userId: null, userName: '', days: '30' }) }}>
-                  Cancel
-                </button>
-                <button className="confirm-btn" style={{ background: '#10b981', borderColor: '#10b981', color: 'white' }} onClick={extendUserPlan}>
-                  Extend Plan
-                </button>
+              <div className="saas-modal-actions">
+                <button className="saas-btn secondary" onClick={() => { setShowExtendPlanModal(false); setExtendPlanData({ userId: null, userName: '', days: '30' }) }}>Cancel</button>
+                <button className="saas-btn primary" onClick={extendUserPlan}>Extend</button>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Toast Notification */}
       {toast.show && (
-        <div className={`admin-toast ${toast.type}`}>
-          <div className="admin-toast-icon">
-            {toast.type === 'success' ? (
-              <svg viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" stroke="currentColor">
-                <polyline points="20 6 9 17 4 12"></polyline>
-              </svg>
-            ) : (
-              <svg viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" stroke="currentColor">
-                <circle cx="12" cy="12" r="10"></circle>
-                <line x1="15" y1="9" x2="9" y2="15"></line>
-                <line x1="9" y1="9" x2="15" y2="15"></line>
-              </svg>
-            )}
-          </div>
-          <div className="admin-toast-message">{toast.message}</div>
+        <div className={`saas-toast ${toast.type}`}>
+          {toast.message}
         </div>
       )}
     </div>
@@ -784,5 +938,3 @@ function AdminPanel() {
 }
 
 createRoot(document.getElementById('root')).render(<AdminPanel />)
-
-
