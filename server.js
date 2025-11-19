@@ -165,7 +165,8 @@ app.post('/api/auth/login', (req, res) => {
     })
     res.json({ success: true, status: user.status })
   } catch (e) {
-    res.status(500).json({ error: 'Internal server error' })
+    console.error('Login error:', e)
+    res.status(500).json({ error: 'Internal server error', details: process.env.NODE_ENV === 'development' ? e.message : undefined })
   }
 })
 

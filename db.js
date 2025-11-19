@@ -11,7 +11,7 @@ db.exec(`
     email TEXT UNIQUE NOT NULL,
     whatsapp TEXT,
     password TEXT,
-    hash TEXT UNIQUE NOT NULL,
+    hash TEXT UNIQUE,
     status TEXT DEFAULT 'pending',
     wa_noti INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -373,22 +373,31 @@ function createOrUpdateSerial(serialName, platformName, url, date) {
 }
 
 function createSession(userId, deviceInfo) {
-  const crypto = require('crypto')
-  const token = crypto.randomBytes(32).toString('hex')
-  db.prepare(`
-    INSERT INTO sessions (user_id, token, device_fingerprint, ip, user_agent, screen_resolution, timezone)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    userId,
-    token,
-    deviceInfo.deviceFingerprint || null,
-    deviceInfo.ip || null,
-    deviceInfo.userAgent || null,
-    deviceInfo.screenResolution || null,
-    deviceInfo.timezone || null
-  )
-  db.prepare('UPDATE users SET hash = ? WHERE id = ?').run(token, userId)
-  return token
+  try {
+    const crypto = require('crypto')
+    const token = crypto.randomBytes(32).toString('hex')
+    db.prepare(`
+      INSERT INTO sessions (user_id, token, device_fingerprint, ip, user_agent, screen_resolution, timezone)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      userId,
+      token,
+      deviceInfo.deviceFingerprint || null,
+      deviceInfo.ip || null,
+      deviceInfo.userAgent || null,
+      deviceInfo.screenResolution || null,
+      deviceInfo.timezone || null
+    )
+    try {
+      db.prepare('UPDATE users SET hash = ? WHERE id = ?').run(token, userId)
+    } catch (e) {
+      console.error('Failed to update user hash:', e.message)
+    }
+    return token
+  } catch (e) {
+    console.error('Failed to create session:', e.message)
+    throw e
+  }
 }
 
 function getSessionByToken(token) {
@@ -404,17 +413,12 @@ function deleteSession(token) {
   const session = db.prepare('SELECT user_id FROM sessions WHERE token = ?').get(token)
   if (session) {
     db.prepare('DELETE FROM sessions WHERE token = ?').run(token)
-    const remaining = db.prepare('SELECT COUNT(*) as count FROM sessions WHERE user_id = ?').get(session.user_id)
-    if (remaining.count === 0) {
-      db.prepare('UPDATE users SET hash = NULL WHERE id = ?').run(session.user_id)
-    }
   }
   return { changes: session ? 1 : 0 }
 }
 
 function deleteUserSessions(userId) {
   db.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId)
-  db.prepare('UPDATE users SET hash = NULL WHERE id = ?').run(userId)
   return { changes: 1 }
 }
 
@@ -423,17 +427,22 @@ function updateSessionActivity(token) {
 }
 
 function logLogin(userId, deviceInfo) {
-  return db.prepare(`
-    INSERT INTO login_history (user_id, ip, user_agent, device_fingerprint, screen_resolution, timezone)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).run(
-    userId,
-    deviceInfo.ip || null,
-    deviceInfo.userAgent || null,
-    deviceInfo.deviceFingerprint || null,
-    deviceInfo.screenResolution || null,
-    deviceInfo.timezone || null
-  )
+  try {
+    return db.prepare(`
+      INSERT INTO login_history (user_id, ip, user_agent, device_fingerprint, screen_resolution, timezone)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(
+      userId,
+      deviceInfo.ip || null,
+      deviceInfo.userAgent || null,
+      deviceInfo.deviceFingerprint || null,
+      deviceInfo.screenResolution || null,
+      deviceInfo.timezone || null
+    )
+  } catch (e) {
+    console.error('Failed to log login:', e.message)
+    throw e
+  }
 }
 
 function getUserLoginHistory(userId) {
