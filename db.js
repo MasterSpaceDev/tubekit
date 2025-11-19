@@ -13,6 +13,7 @@ db.exec(`
     password TEXT,
     hash TEXT UNIQUE NOT NULL,
     status TEXT DEFAULT 'pending',
+    wa_noti INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
@@ -59,75 +60,20 @@ db.exec(`
 
   CREATE TABLE IF NOT EXISTS user_serials (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
+    user_email TEXT NOT NULL,
     serial_id TEXT NOT NULL,
     added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id),
+    FOREIGN KEY (user_email) REFERENCES users(email),
     FOREIGN KEY (serial_id) REFERENCES serials(id),
-    UNIQUE(user_id, serial_id)
+    UNIQUE(user_email, serial_id)
   );
 
   CREATE INDEX IF NOT EXISTS idx_download_logs_serial ON download_logs(serial_id);
   CREATE INDEX IF NOT EXISTS idx_download_logs_user ON download_logs(user_id);
   CREATE INDEX IF NOT EXISTS idx_download_logs_downloaded_at ON download_logs(downloaded_at);
-  CREATE INDEX IF NOT EXISTS idx_user_serials_user ON user_serials(user_id);
+  CREATE INDEX IF NOT EXISTS idx_user_serials_user ON user_serials(user_email);
   CREATE INDEX IF NOT EXISTS idx_user_serials_serial ON user_serials(serial_id);
 `)
-
-// Add wa_noti column to users table if it doesn't exist
-try {
-  db.exec(`ALTER TABLE users ADD COLUMN wa_noti INTEGER DEFAULT 0`)
-} catch (error) {
-  // Column already exists, ignore error
-  if (!error.message.includes('duplicate column name')) {
-    throw error
-  }
-}
-
-// Migrate user_serials table to use email instead of user_id
-try {
-  // Check if migration is needed by checking if user_email column exists
-  const tableInfo = db.prepare("PRAGMA table_info(user_serials)").all()
-  const hasUserEmail = tableInfo.some(col => col.name === 'user_email')
-
-  if (!hasUserEmail) {
-    // Create new table with user_email
-    db.exec(`
-      CREATE TABLE user_serials_new (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_email TEXT NOT NULL,
-        serial_id TEXT NOT NULL,
-        added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (user_email) REFERENCES users(email),
-        FOREIGN KEY (serial_id) REFERENCES serials(id),
-        UNIQUE(user_email, serial_id)
-      )
-    `)
-
-    // Copy data from old table, converting user_id to email
-    db.exec(`
-      INSERT INTO user_serials_new (user_email, serial_id, added_at)
-      SELECT u.email, us.serial_id, us.added_at
-      FROM user_serials us
-      JOIN users u ON us.user_id = u.id
-    `)
-
-    // Drop old table
-    db.exec(`DROP TABLE user_serials`)
-
-    // Rename new table
-    db.exec(`ALTER TABLE user_serials_new RENAME TO user_serials`)
-
-    // Recreate indexes
-    db.exec(`
-      CREATE INDEX IF NOT EXISTS idx_user_serials_user ON user_serials(user_email);
-      CREATE INDEX IF NOT EXISTS idx_user_serials_serial ON user_serials(serial_id);
-    `)
-  }
-} catch (error) {
-  console.error('Error migrating user_serials table:', error)
-  throw error
-}
 
 function getSerials() {
   return db.prepare(`
@@ -272,6 +218,14 @@ function getUsers() {
   return db.prepare('SELECT * FROM users ORDER BY created_at DESC').all()
 }
 
+function updateUserWhatsApp(userId, whatsapp) {
+  return db.prepare('UPDATE users SET whatsapp = ? WHERE id = ?').run(whatsapp, userId)
+}
+
+function updateUserWaNoti(userId, waNoti) {
+  return db.prepare('UPDATE users SET wa_noti = ? WHERE id = ?').run(waNoti, userId)
+}
+
 // User Serials Management
 function getUserSerials(userEmail) {
   return db.prepare(`
@@ -389,6 +343,8 @@ module.exports = {
   getUserDownloadStats,
   updateUserStatus,
   getUsers,
+  updateUserWhatsApp,
+  updateUserWaNoti,
   // User serials management
   getUserSerials,
   getAllAvailableSerials,

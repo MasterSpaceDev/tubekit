@@ -16,6 +16,8 @@ const {
   getSerialDownloadStats,
   getUserDownloadStats,
   updateUserStatus,
+  updateUserWhatsApp,
+  updateUserWaNoti,
   getUserSerials,
   getAllAvailableSerials,
   addSerialToUser,
@@ -341,6 +343,40 @@ app.delete('/api/admin/users/:id', (req, res) => {
 
     if (!result.changes) return res.status(404).json({ error: 'User not found' })
     res.json({ success: true, userId })
+  } catch (e) {
+    res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
+app.patch('/api/admin/users/:id/whatsapp', (req, res) => {
+  try {
+    const admin = verifyAdmin(req)
+    if (!admin) return res.status(401).json({ error: 'Unauthorized' })
+    const userId = Number(req.params.id)
+    if (!userId) return res.status(400).json({ error: 'Invalid user id' })
+    const { whatsapp } = req.body || {}
+    if (whatsapp === undefined) return res.status(400).json({ error: 'Missing whatsapp field' })
+
+    const result = updateUserWhatsApp(userId, whatsapp)
+    if (!result.changes) return res.status(404).json({ error: 'User not found' })
+    res.json({ success: true, userId, whatsapp })
+  } catch (e) {
+    res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
+app.patch('/api/admin/users/:id/wa-noti', (req, res) => {
+  try {
+    const admin = verifyAdmin(req)
+    if (!admin) return res.status(401).json({ error: 'Unauthorized' })
+    const userId = Number(req.params.id)
+    if (!userId) return res.status(400).json({ error: 'Invalid user id' })
+    const { waNoti } = req.body || {}
+    if (waNoti === undefined) return res.status(400).json({ error: 'Missing waNoti field' })
+
+    const result = updateUserWaNoti(userId, waNoti ? 1 : 0)
+    if (!result.changes) return res.status(404).json({ error: 'User not found' })
+    res.json({ success: true, userId, waNoti: waNoti ? 1 : 0 })
   } catch (e) {
     res.status(500).json({ error: 'Internal server error' })
   }

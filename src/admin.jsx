@@ -80,6 +80,39 @@ function AdminPanel() {
     }
   }
 
+  const updateWhatsApp = async (userId, currentWhatsApp) => {
+    const newWhatsApp = prompt('Enter new WhatsApp number:', currentWhatsApp || '')
+    if (newWhatsApp === null) return // User cancelled
+
+    try {
+      await fetch(`/api/admin/users/${userId}/whatsapp`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ whatsapp: newWhatsApp })
+      })
+      loadData()
+    } catch (err) {
+      console.error('Failed to update WhatsApp:', err)
+      alert('Failed to update WhatsApp number')
+    }
+  }
+
+  const toggleWaNoti = async (userId, currentStatus) => {
+    try {
+      await fetch(`/api/admin/users/${userId}/wa-noti`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ waNoti: !currentStatus })
+      })
+      loadData()
+    } catch (err) {
+      console.error('Failed to toggle wa_noti:', err)
+      alert('Failed to toggle WhatsApp notification')
+    }
+  }
+
   if (authStatus === 'loading') {
     return (
       <div className="admin-container">
@@ -168,11 +201,25 @@ function AdminPanel() {
                       <div className="admin-user-info">
                         <div className="admin-user-name">{user.name}</div>
                         <div className="admin-user-email">{user.email}</div>
-                        {user.whatsapp && (
-                          <div className="admin-user-whatsapp">{user.whatsapp}</div>
-                        )}
+                        <div className="admin-user-whatsapp">
+                          {user.whatsapp || 'No WhatsApp'}
+                          <button
+                            className="admin-btn-small"
+                            onClick={() => updateWhatsApp(user.id, user.whatsapp)}
+                            title="Edit WhatsApp number"
+                          >
+                            Edit
+                          </button>
+                        </div>
                         <div className="admin-user-wa-noti">
                           WA Notification: {user.wa_noti ? 'Enabled' : 'Disabled'}
+                          <button
+                            className="admin-btn-small"
+                            onClick={() => toggleWaNoti(user.id, user.wa_noti)}
+                            title="Toggle WhatsApp notification"
+                          >
+                            {user.wa_noti ? 'Disable' : 'Enable'}
+                          </button>
                         </div>
                       </div>
                       <div className="admin-user-actions">
@@ -214,11 +261,25 @@ function AdminPanel() {
                       <div className="admin-user-info">
                         <span className="admin-user-name">{user.name}</span>
                         <span className="admin-user-email">{user.email}</span>
-                        {user.whatsapp && (
-                          <span className="admin-user-whatsapp">{user.whatsapp}</span>
-                        )}
+                        <span className="admin-user-whatsapp">
+                          {user.whatsapp || 'No WhatsApp'}
+                          <button
+                            className="admin-btn-icon"
+                            onClick={() => updateWhatsApp(user.id, user.whatsapp)}
+                            title="Edit WhatsApp number"
+                          >
+                            ✎
+                          </button>
+                        </span>
                         <span className="admin-user-wa-noti">
                           WA: {user.wa_noti ? 'ON' : 'OFF'}
+                          <button
+                            className="admin-btn-icon"
+                            onClick={() => toggleWaNoti(user.id, user.wa_noti)}
+                            title="Toggle WhatsApp notification"
+                          >
+                            {user.wa_noti ? '✓' : '✗'}
+                          </button>
                         </span>
                       </div>
                       <div className="admin-user-meta">
