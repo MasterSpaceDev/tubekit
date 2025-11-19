@@ -68,11 +68,41 @@ db.exec(`
     UNIQUE(user_email, serial_id)
   );
 
+  CREATE TABLE IF NOT EXISTS sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    token TEXT UNIQUE NOT NULL,
+    device_fingerprint TEXT,
+    ip TEXT,
+    user_agent TEXT,
+    screen_resolution TEXT,
+    timezone TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    last_activity DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS login_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    ip TEXT,
+    user_agent TEXT,
+    device_fingerprint TEXT,
+    screen_resolution TEXT,
+    timezone TEXT,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
+
   CREATE INDEX IF NOT EXISTS idx_download_logs_serial ON download_logs(serial_id);
   CREATE INDEX IF NOT EXISTS idx_download_logs_user ON download_logs(user_id);
   CREATE INDEX IF NOT EXISTS idx_download_logs_downloaded_at ON download_logs(downloaded_at);
   CREATE INDEX IF NOT EXISTS idx_user_serials_user ON user_serials(user_email);
   CREATE INDEX IF NOT EXISTS idx_user_serials_serial ON user_serials(serial_id);
+  CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token);
+  CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
+  CREATE INDEX IF NOT EXISTS idx_login_history_user ON login_history(user_id);
+  CREATE INDEX IF NOT EXISTS idx_login_history_timestamp ON login_history(timestamp);
 `)
 
 function getSerials() {
@@ -183,7 +213,7 @@ function getSerialDownloadStats() {
 }
 
 function getUserDownloadStats() {
-  return db.prepare(`
+  const users = db.prepare(`
     SELECT
       u.id,
       u.name,
@@ -208,6 +238,21 @@ function getUserDownloadStats() {
     GROUP BY u.id
     ORDER BY u.created_at DESC
   `).all()
+  
+  return users.map(user => {
+    const loginStats = getUserLoginStats(user.id)
+    const currentSession = db.prepare(`
+      SELECT device_fingerprint FROM sessions WHERE user_id = ? ORDER BY created_at DESC LIMIT 1
+    `).get(user.id)
+    
+    return {
+      ...user,
+      total_logins: loginStats.total_logins,
+      unique_devices: loginStats.unique_devices,
+      unique_ips: loginStats.unique_ips,
+      device_fingerprint: currentSession?.device_fingerprint || null
+    }
+  })
 }
 
 function updateUserStatus(userId, status) {
@@ -327,6 +372,90 @@ function createOrUpdateSerial(serialName, platformName, url, date) {
   return { serialId, serialName, platform }
 }
 
+function createSession(userId, deviceInfo) {
+  const crypto = require('crypto')
+  const token = crypto.randomBytes(32).toString('hex')
+  db.prepare(`
+    INSERT INTO sessions (user_id, token, device_fingerprint, ip, user_agent, screen_resolution, timezone)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    userId,
+    token,
+    deviceInfo.deviceFingerprint || null,
+    deviceInfo.ip || null,
+    deviceInfo.userAgent || null,
+    deviceInfo.screenResolution || null,
+    deviceInfo.timezone || null
+  )
+  db.prepare('UPDATE users SET hash = ? WHERE id = ?').run(token, userId)
+  return token
+}
+
+function getSessionByToken(token) {
+  return db.prepare(`
+    SELECT s.*, u.status, u.email, u.name, u.whatsapp
+    FROM sessions s
+    JOIN users u ON s.user_id = u.id
+    WHERE s.token = ?
+  `).get(token)
+}
+
+function deleteSession(token) {
+  const session = db.prepare('SELECT user_id FROM sessions WHERE token = ?').get(token)
+  if (session) {
+    db.prepare('DELETE FROM sessions WHERE token = ?').run(token)
+    const remaining = db.prepare('SELECT COUNT(*) as count FROM sessions WHERE user_id = ?').get(session.user_id)
+    if (remaining.count === 0) {
+      db.prepare('UPDATE users SET hash = NULL WHERE id = ?').run(session.user_id)
+    }
+  }
+  return { changes: session ? 1 : 0 }
+}
+
+function deleteUserSessions(userId) {
+  db.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId)
+  db.prepare('UPDATE users SET hash = NULL WHERE id = ?').run(userId)
+  return { changes: 1 }
+}
+
+function updateSessionActivity(token) {
+  return db.prepare('UPDATE sessions SET last_activity = CURRENT_TIMESTAMP WHERE token = ?').run(token)
+}
+
+function logLogin(userId, deviceInfo) {
+  return db.prepare(`
+    INSERT INTO login_history (user_id, ip, user_agent, device_fingerprint, screen_resolution, timezone)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(
+    userId,
+    deviceInfo.ip || null,
+    deviceInfo.userAgent || null,
+    deviceInfo.deviceFingerprint || null,
+    deviceInfo.screenResolution || null,
+    deviceInfo.timezone || null
+  )
+}
+
+function getUserLoginHistory(userId) {
+  return db.prepare(`
+    SELECT * FROM login_history
+    WHERE user_id = ?
+    ORDER BY timestamp DESC
+  `).all(userId)
+}
+
+function getUserLoginStats(userId) {
+  const stats = db.prepare(`
+    SELECT
+      COUNT(*) AS total_logins,
+      COUNT(DISTINCT device_fingerprint) AS unique_devices,
+      COUNT(DISTINCT ip) AS unique_ips
+    FROM login_history
+    WHERE user_id = ?
+  `).get(userId)
+  return stats || { total_logins: 0, unique_devices: 0, unique_ips: 0 }
+}
+
 module.exports = {
   db,
   getSerials,
@@ -353,5 +482,15 @@ module.exports = {
   isSerialAddedByUser,
   // Platform & serial creation
   getOrCreatePlatform,
-  createOrUpdateSerial
+  createOrUpdateSerial,
+  // Session management
+  createSession,
+  getSessionByToken,
+  deleteSession,
+  deleteUserSessions,
+  updateSessionActivity,
+  // Login history
+  logLogin,
+  getUserLoginHistory,
+  getUserLoginStats
 }

@@ -10,6 +10,7 @@
     "start": "node server.js"
   },
   "dependencies": {
+    "@fingerprintjs/fingerprintjs": "^4.2.1",
     "better-sqlite3": "^11.7.0",
     "cookie-parser": "^1.4.6",
     "dotenv": "^16.4.5",

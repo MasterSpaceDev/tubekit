@@ -9,12 +9,21 @@ function AdminPanel() {
   const [users, setUsers] = useState([])
   const [serials, setSerials] = useState([])
   const [serialsPage, setSerialsPage] = useState(0)
+  const [showLoginHistory, setShowLoginHistory] = useState(false)
+  const [loginHistory, setLoginHistory] = useState([])
+  const [selectedUserId, setSelectedUserId] = useState(null)
 
   useEffect(() => {
-    // Check admin auth
     fetch('/api/auth/status', { credentials: 'include' })
-      .then(r => r.json())
+      .then(r => {
+        if (r.status === 401) {
+          window.location.href = '/login?message=session-expired'
+          return
+        }
+        return r.json()
+      })
       .then(data => {
+        if (!data) return
         if (data.status === 'admin') {
           setAuthStatus('authorized')
           loadData()
@@ -27,8 +36,11 @@ function AdminPanel() {
 
   const loadData = async () => {
     try {
-      // Load stats and users
       const statsRes = await fetch('/api/admin/stats', { credentials: 'include' })
+      if (statsRes.status === 401) {
+        window.location.href = '/login?message=session-expired'
+        return
+      }
       const statsData = await statsRes.json()
 
       setStats(statsData.overview || {})
@@ -41,10 +53,14 @@ function AdminPanel() {
 
   const approveUser = async (userId) => {
     try {
-      await fetch(`/api/admin/users/${userId}/approve`, {
+      const r = await fetch(`/api/admin/users/${userId}/approve`, {
         method: 'POST',
         credentials: 'include'
       })
+      if (r.status === 401) {
+        window.location.href = '/login?message=session-expired'
+        return
+      }
       loadData()
     } catch (err) {
       console.error('Failed to approve user:', err)
@@ -53,10 +69,14 @@ function AdminPanel() {
 
   const rejectUser = async (userId) => {
     try {
-      await fetch(`/api/admin/users/${userId}/reject`, {
+      const r = await fetch(`/api/admin/users/${userId}/reject`, {
         method: 'POST',
         credentials: 'include'
       })
+      if (r.status === 401) {
+        window.location.href = '/login?message=session-expired'
+        return
+      }
       loadData()
     } catch (err) {
       console.error('Failed to reject user:', err)
@@ -69,10 +89,14 @@ function AdminPanel() {
     }
 
     try {
-      await fetch(`/api/admin/users/${userId}`, {
+      const r = await fetch(`/api/admin/users/${userId}`, {
         method: 'DELETE',
         credentials: 'include'
       })
+      if (r.status === 401) {
+        window.location.href = '/login?message=session-expired'
+        return
+      }
       loadData()
     } catch (err) {
       console.error('Failed to delete user:', err)
@@ -82,15 +106,19 @@ function AdminPanel() {
 
   const updateWhatsApp = async (userId, currentWhatsApp) => {
     const newWhatsApp = prompt('Enter new WhatsApp number:', currentWhatsApp || '')
-    if (newWhatsApp === null) return // User cancelled
+    if (newWhatsApp === null) return
 
     try {
-      await fetch(`/api/admin/users/${userId}/whatsapp`, {
+      const r = await fetch(`/api/admin/users/${userId}/whatsapp`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({ whatsapp: newWhatsApp })
       })
+      if (r.status === 401) {
+        window.location.href = '/login?message=session-expired'
+        return
+      }
       loadData()
     } catch (err) {
       console.error('Failed to update WhatsApp:', err)
@@ -100,12 +128,16 @@ function AdminPanel() {
 
   const toggleWaNoti = async (userId, currentStatus) => {
     try {
-      await fetch(`/api/admin/users/${userId}/wa-noti`, {
+      const r = await fetch(`/api/admin/users/${userId}/wa-noti`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({ waNoti: !currentStatus })
       })
+      if (r.status === 401) {
+        window.location.href = '/login?message=session-expired'
+        return
+      }
       loadData()
     } catch (err) {
       console.error('Failed to toggle wa_noti:', err)
@@ -286,6 +318,31 @@ function AdminPanel() {
                         <span className="admin-user-downloads">
                           {user.totalDownloads || 0} downloads
                         </span>
+                        <span className="admin-user-login-stats">
+                          {user.total_logins || 0} logins | {user.unique_devices || 0} devices | {user.unique_ips || 0} IPs
+                        </span>
+                        <button
+                          className="admin-btn-icon"
+                          onClick={() => {
+                            setSelectedUserId(user.id)
+                            fetch(`/api/admin/users/${user.id}/login-history`, { credentials: 'include' })
+                              .then(r => {
+                                if (r.status === 401) {
+                                  window.location.href = '/login?message=session-expired'
+                                  return
+                                }
+                                return r.json()
+                              })
+                              .then(data => {
+                                if (!data) return
+                                setLoginHistory(data.history || [])
+                                setShowLoginHistory(true)
+                              })
+                          }}
+                          title="View login history"
+                        >
+                          📊
+                        </button>
                         <button
                           className="admin-btn-icon delete"
                           onClick={() => deleteUser(user.id, user.name)}
@@ -373,6 +430,49 @@ function AdminPanel() {
           </div>
         )}
       </div>
+
+      {showLoginHistory && (
+        <div className="modal-bg show">
+          <div className="modal" style={{ maxWidth: '800px', maxHeight: '80vh', overflow: 'auto' }}>
+            <button className="modal-close" onClick={() => setShowLoginHistory(false)}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+            <div className="modal-hdr">
+              <div className="modal-title">Login History</div>
+              <div className="modal-subtitle">Complete login timeline for user</div>
+            </div>
+            <div style={{ padding: '20px' }}>
+              {loginHistory.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>No login history found</div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {loginHistory.map((entry, idx) => (
+                    <div key={entry.id || idx} style={{ padding: '16px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '8px' }}>
+                        <div style={{ fontWeight: '600', color: '#1e293b' }}>
+                          {new Date(entry.timestamp).toLocaleString()}
+                        </div>
+                      </div>
+                      <div style={{ fontSize: '13px', color: '#64748b', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                        <div><strong>IP:</strong> {entry.ip || 'N/A'}</div>
+                        <div><strong>Device:</strong> {entry.device_fingerprint ? entry.device_fingerprint.substring(0, 16) + '...' : 'N/A'}</div>
+                        <div><strong>Screen:</strong> {entry.screen_resolution || 'N/A'}</div>
+                        <div><strong>Timezone:</strong> {entry.timezone || 'N/A'}</div>
+                      </div>
+                      <div style={{ marginTop: '8px', fontSize: '12px', color: '#94a3b8' }}>
+                        <strong>User Agent:</strong> {entry.user_agent || 'N/A'}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

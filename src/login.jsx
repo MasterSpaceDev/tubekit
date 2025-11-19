@@ -1,17 +1,33 @@
 import React, { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import './globals.css'
+import { getDeviceInfo } from './fingerprint'
 
 function LoginPage() {
   const [formData, setFormData] = useState({ email: '', password: '' })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [deviceInfo, setDeviceInfo] = useState(null)
 
   useEffect(() => {
-    // Check if already logged in
+    const urlParams = new URLSearchParams(window.location.search)
+    const message = urlParams.get('message')
+    if (message === 'session-expired') {
+      setError('Session expired on another device')
+    }
+
+    getDeviceInfo().then(info => setDeviceInfo(info))
+
     fetch('/api/auth/status', { credentials: 'include' })
-      .then(r => r.json())
+      .then(r => {
+        if (r.status === 401) {
+          window.location.href = '/login?message=session-expired'
+          return
+        }
+        return r.json()
+      })
       .then(data => {
+        if (!data) return
         if (data.status === 'admin') {
           window.location.href = '/admin'
         } else if (data.status === 'approved') {
@@ -27,17 +43,32 @@ function LoginPage() {
     setError('')
     setLoading(true)
 
+    if (!deviceInfo) {
+      setError('Device fingerprint not ready. Please wait...')
+      setLoading(false)
+      return
+    }
+
     try {
       const r = await fetch('/api/auth/login', {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
+        body: JSON.stringify({
+          ...formData,
+          ...deviceInfo
+        })
       })
+
+      if (r.status === 401) {
+        setError('Invalid email or password')
+        setLoading(false)
+        return
+      }
+
       const data = await r.json()
 
       if (data.success) {
-        // Redirect based on status
         if (data.status === 'admin') {
           window.location.href = '/admin'
         } else if (data.status === 'approved') {

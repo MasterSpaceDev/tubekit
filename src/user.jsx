@@ -1,11 +1,17 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react'
 import { createRoot } from 'react-dom/client'
 import './globals.css'
+import { getDeviceInfo } from './fingerprint'
 
 function InviteForm(){
   const [formData,setFormData]=useState({name:'',email:'',whatsapp:'',password:''})
   const [error,setError]=useState('')
   const [loading,setLoading]=useState(false)
+  const [deviceInfo,setDeviceInfo]=useState(null)
+
+  useEffect(()=>{
+    getDeviceInfo().then(info=>setDeviceInfo(info))
+  },[])
 
   const submit=async(e)=>{
     e.preventDefault()
@@ -14,10 +20,11 @@ function InviteForm(){
     if(!formData.name.trim()){setError('Name is required');return}
     if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)){setError('Invalid email');return}
     if(formData.password.length<6){setError('Password must be at least 6 characters');return}
+    if(!deviceInfo){setError('Device fingerprint not ready. Please wait...');return}
 
     setLoading(true)
     try{
-      const r=await fetch('/api/auth/register',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify(formData)})
+      const r=await fetch('/api/auth/register',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({...formData,...deviceInfo})})
       const j=await r.json()
       if(j.success){window.location.href='/'}else{setError(j.error||'Failed to submit')}
     }catch(e){setError('Network error: '+e.message)}finally{setLoading(false)}
@@ -178,8 +185,15 @@ function AddSerialModal({ onClose, onAdd }){
 
   useEffect(()=>{
     fetch('/api/serials/available',{credentials:'include'})
-      .then(r=>r.json())
+      .then(r=>{
+        if(r.status===401){
+          window.location.href='/login?message=session-expired'
+          return
+        }
+        return r.json()
+      })
       .then(j=>{
+        if(!j) return
         setAllSerials(j.serials||[])
         setLoading(false)
       })
@@ -205,6 +219,10 @@ function AddSerialModal({ onClose, onAdd }){
   const handleAdd=async(serialId)=>{
     try{
       const r=await fetch('/api/serials/add',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({serialId})})
+      if(r.status===401){
+        window.location.href='/login?message=session-expired'
+        return
+      }
       const data=await r.json()
       if(data.success){
         setAllSerials(prev=>prev.map(s=>s.id===serialId?{...s,isAdded:true}:s))
@@ -504,9 +522,18 @@ function Dashboard({ user }){
   const pollingRef=useRef(null)
 
   const loadSerials=()=>{
-    fetch('/api/serials',{credentials:'include'}).then(r=>r.json()).then(j=>{
-      setSerials(j.serials||[])
-    })
+    fetch('/api/serials',{credentials:'include'})
+      .then(r=>{
+        if(r.status===401){
+          window.location.href='/login?message=session-expired'
+          return
+        }
+        return r.json()
+      })
+      .then(j=>{
+        if(!j) return
+        setSerials(j.serials||[])
+      })
   }
 
   const stopPolling=()=>{
@@ -527,6 +554,10 @@ function Dashboard({ user }){
     setShowDownloadModal(false);setShowProcessingModal(true);setDownloadType(type);setProgress(0)
     try{
       const r=await fetch('/api/download',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({serialId:currentSerial.id,type})})
+      if(r.status===401){
+        window.location.href='/login?message=session-expired'
+        return
+      }
       const d=await r.json()
       if(d.status==='ready'){
         stopPolling()
@@ -553,6 +584,11 @@ function Dashboard({ user }){
     const id=setInterval(async()=>{
       try{
         const r=await fetch('/api/status/check?serialId='+encodeURIComponent(serialId)+'&type='+encodeURIComponent(type),{credentials:'include'})
+        if(r.status===401){
+          stopPolling()
+          window.location.href='/login?message=session-expired'
+          return
+        }
         const d=await r.json()
         if(d.status==='processing') setProgress(d.progress||0)
         if(d.status==='ready'){
@@ -588,6 +624,10 @@ function Dashboard({ user }){
     setShowConfirmModal(false)
     try{
       const r=await fetch(`/api/serials/remove/${serialToRemove.id}`,{method:'DELETE',credentials:'include'})
+      if(r.status===401){
+        window.location.href='/login?message=session-expired'
+        return
+      }
       const data=await r.json()
       if(data.success) loadSerials()
       else alert(data.error||'Failed to remove serial')
@@ -665,7 +705,21 @@ function Home({ status }){
 function App(){
   const [status,setStatus]=useState('loading')
   const [user,setUser]=useState(null)
-  useEffect(()=>{fetch('/api/auth/status',{credentials:'include'}).then(r=>r.json()).then(j=>{setStatus(j.status||'guest');setUser(j.user||null)})},[])
+  useEffect(()=>{
+    fetch('/api/auth/status',{credentials:'include'})
+      .then(r=>{
+        if(r.status===401){
+          window.location.href='/login?message=session-expired'
+          return
+        }
+        return r.json()
+      })
+      .then(j=>{
+        if(!j) return
+        setStatus(j.status||'guest')
+        setUser(j.user||null)
+      })
+  },[])
   if(status==='loading') return <div className="container"></div>
   if(status==='pending') return <PendingScreen />
   if(status==='guest') return <InviteForm />

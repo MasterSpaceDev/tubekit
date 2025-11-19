@@ -23,10 +23,19 @@ const {
   addSerialToUser,
   removeSerialFromUser,
   isSerialAddedByUser,
-  createOrUpdateSerial
+  createOrUpdateSerial,
+  createSession,
+  getSessionByToken,
+  deleteSession,
+  deleteUserSessions,
+  updateSessionActivity,
+  logLogin,
+  getUserLoginHistory,
+  getUserLoginStats
 } = require('./db')
 
 const app = express()
+app.set('trust proxy', true)
 app.use(express.json({ limit: '1mb' }))
 app.use(cookieParser())
 
@@ -42,15 +51,35 @@ function createHash(name, email, password) {
 }
 
 function verifyAuth(req) {
-  const hash = req.cookies && req.cookies['tubekit_hash']
-  if (!hash) return null
-  return db.prepare('SELECT * FROM users WHERE hash = ? AND status IN (?, ?)').get(hash, 'approved', 'admin') || null
+  const token = req.cookies && req.cookies['tubekit_session']
+  if (!token) return null
+  const session = getSessionByToken(token)
+  if (!session) return null
+  if (session.status !== 'approved' && session.status !== 'admin') return null
+  updateSessionActivity(token)
+  return {
+    id: session.user_id,
+    name: session.name,
+    email: session.email,
+    whatsapp: session.whatsapp,
+    status: session.status
+  }
 }
 
 function verifyAdmin(req) {
-  const hash = req.cookies && req.cookies['tubekit_hash']
-  if (!hash) return null
-  return db.prepare('SELECT * FROM users WHERE hash = ? AND status = ?').get(hash, 'admin') || null
+  const token = req.cookies && req.cookies['tubekit_session']
+  if (!token) return null
+  const session = getSessionByToken(token)
+  if (!session) return null
+  if (session.status !== 'admin') return null
+  updateSessionActivity(token)
+  return {
+    id: session.user_id,
+    name: session.name,
+    email: session.email,
+    whatsapp: session.whatsapp,
+    status: session.status
+  }
 }
 
 function getTrackedDownloadUrl(serialId, type) {
@@ -59,7 +88,7 @@ function getTrackedDownloadUrl(serialId, type) {
 
 app.post('/api/auth/register', (req, res) => {
   try {
-    const { name, email, whatsapp, password } = req.body || {}
+    const { name, email, whatsapp, password, deviceFingerprint, screenResolution, timezone } = req.body || {}
     if (!name || !email || !password) return res.status(400).json({ error: 'Name, email and password required' })
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'Invalid email' })
     if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' })
@@ -67,16 +96,31 @@ app.post('/api/auth/register', (req, res) => {
     if (existing) return res.status(400).json({ error: 'Already registered' })
 
     const hashedPassword = hashPassword(password)
-    const hash = createHash(name, email, password)
 
-    db.prepare('INSERT INTO users (name, email, whatsapp, password, hash, status) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(name, email, whatsapp || '', hashedPassword, hash, 'pending')
+    const result = db.prepare('INSERT INTO users (name, email, whatsapp, password, hash, status) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(name, email, whatsapp || '', hashedPassword, null, 'pending')
 
-    res.cookie('tubekit_hash', hash, {
+    const userId = result.lastInsertRowid
+    const ip = req.ip || req.headers['x-forwarded-for'] || req.connection.remoteAddress || 'unknown'
+    const userAgent = req.headers['user-agent'] || 'unknown'
+
+    const deviceInfo = {
+      deviceFingerprint,
+      ip,
+      userAgent,
+      screenResolution,
+      timezone
+    }
+
+    const token = createSession(userId, deviceInfo)
+    logLogin(userId, deviceInfo)
+
+    res.cookie('tubekit_session', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       maxAge: 60 * 60 * 24 * 365 * 1000,
-      path: '/'
+      path: '/',
+      sameSite: 'lax'
     })
     res.json({ success: true })
   } catch (e) {
@@ -86,7 +130,7 @@ app.post('/api/auth/register', (req, res) => {
 
 app.post('/api/auth/login', (req, res) => {
   try {
-    const { email, password } = req.body || {}
+    const { email, password, deviceFingerprint, screenResolution, timezone } = req.body || {}
     if (!email || !password) return res.status(400).json({ error: 'Email and password required' })
 
     const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email)
@@ -96,14 +140,28 @@ app.post('/api/auth/login', (req, res) => {
     const hashedPassword = hashPassword(password)
     if (hashedPassword !== user.password) return res.status(401).json({ error: 'Invalid email or password' })
 
-    // Generate cookie hash same way as registration
-    const hash = createHash(user.name, user.email, password)
+    const ip = req.ip || req.headers['x-forwarded-for'] || req.connection.remoteAddress || 'unknown'
+    const userAgent = req.headers['user-agent'] || 'unknown'
 
-    res.cookie('tubekit_hash', hash, {
+    deleteUserSessions(user.id)
+
+    const deviceInfo = {
+      deviceFingerprint,
+      ip,
+      userAgent,
+      screenResolution,
+      timezone
+    }
+
+    const token = createSession(user.id, deviceInfo)
+    logLogin(user.id, deviceInfo)
+
+    res.cookie('tubekit_session', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       maxAge: 60 * 60 * 24 * 365 * 1000,
-      path: '/'
+      path: '/',
+      sameSite: 'lax'
     })
     res.json({ success: true, status: user.status })
   } catch (e) {
@@ -113,14 +171,20 @@ app.post('/api/auth/login', (req, res) => {
 
 app.get('/api/auth/status', (req, res) => {
   try {
-    const hash = req.cookies && req.cookies['tubekit_hash']
-    if (!hash) return res.json({ status: 'guest' })
-    const admin = db.prepare('SELECT * FROM users WHERE hash = ? AND status = ?').get(hash, 'admin')
-    if (admin) return res.json({ status: 'admin', user: { id: admin.id, name: admin.name, email: admin.email, whatsapp: admin.whatsapp, status: 'admin' } })
-    const approved = db.prepare('SELECT * FROM users WHERE hash = ? AND status = ?').get(hash, 'approved')
-    if (approved) return res.json({ status: 'approved', user: { id: approved.id, name: approved.name, email: approved.email, whatsapp: approved.whatsapp, status: 'approved' } })
-    const pending = db.prepare('SELECT * FROM users WHERE hash = ? AND status = ?').get(hash, 'pending')
-    if (pending) return res.json({ status: 'pending' })
+    const token = req.cookies && req.cookies['tubekit_session']
+    if (!token) return res.json({ status: 'guest' })
+    const session = getSessionByToken(token)
+    if (!session) return res.json({ status: 'guest' })
+    updateSessionActivity(token)
+    if (session.status === 'admin') {
+      return res.json({ status: 'admin', user: { id: session.user_id, name: session.name, email: session.email, whatsapp: session.whatsapp, status: 'admin' } })
+    }
+    if (session.status === 'approved') {
+      return res.json({ status: 'approved', user: { id: session.user_id, name: session.name, email: session.email, whatsapp: session.whatsapp, status: 'approved' } })
+    }
+    if (session.status === 'pending') {
+      return res.json({ status: 'pending' })
+    }
     res.json({ status: 'guest' })
   } catch (e) {
     res.status(500).json({ error: 'Internal server error' })
@@ -281,6 +345,19 @@ app.get('/api/admin/users', (req, res) => {
     if (!admin) return res.status(401).json({ error: 'Unauthorized' })
     const users = getUserDownloadStats()
     res.json({ users })
+  } catch (e) {
+    res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
+app.get('/api/admin/users/:id/login-history', (req, res) => {
+  try {
+    const admin = verifyAdmin(req)
+    if (!admin) return res.status(401).json({ error: 'Unauthorized' })
+    const userId = Number(req.params.id)
+    if (!userId) return res.status(400).json({ error: 'Invalid user id' })
+    const history = getUserLoginHistory(userId)
+    res.json({ history })
   } catch (e) {
     res.status(500).json({ error: 'Internal server error' })
   }
