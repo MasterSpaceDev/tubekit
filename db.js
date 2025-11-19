@@ -134,6 +134,18 @@ try {
   console.error('Schema migration error (non-critical):', migrationError.message)
 }
 
+// Add plan_expiry_date column if it doesn't exist
+try {
+  const tableInfo = db.prepare("PRAGMA table_info(users)").all()
+  const planExpiryColumn = tableInfo.find(col => col.name === 'plan_expiry_date')
+  if (!planExpiryColumn) {
+    db.exec('ALTER TABLE users ADD COLUMN plan_expiry_date TEXT')
+    console.log('Added plan_expiry_date column to users table')
+  }
+} catch (migrationError) {
+  console.error('Plan expiry migration error (non-critical):', migrationError.message)
+}
+
 function getSerials() {
   return db.prepare(`
     SELECT s.*, p.name as platform_name, p.slug as platform_slug
@@ -251,6 +263,7 @@ function getUserDownloadStats() {
       u.status,
       u.wa_noti,
       u.created_at,
+      u.plan_expiry_date,
       COUNT(dl.id) AS totalDownloads,
       COALESCE(SUM(CASE
             WHEN dl.downloaded_at >= ${todayStart}
@@ -298,6 +311,48 @@ function updateUserWhatsApp(userId, whatsapp) {
 
 function updateUserWaNoti(userId, waNoti) {
   return db.prepare('UPDATE users SET wa_noti = ? WHERE id = ?').run(waNoti, userId)
+}
+
+// Plan Management Functions
+function updateUserPlanDays(userId, days) {
+  // Calculate expiry date by adding days from now
+  const expiryDate = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString()
+  return db.prepare('UPDATE users SET plan_expiry_date = ? WHERE id = ?').run(expiryDate, userId)
+}
+
+function extendUserPlanDays(userId, days) {
+  // Get current expiry date
+  const user = db.prepare('SELECT plan_expiry_date FROM users WHERE id = ?').get(userId)
+  if (!user) return { changes: 0 }
+  
+  let newExpiryDate
+  if (user.plan_expiry_date) {
+    const currentExpiry = new Date(user.plan_expiry_date)
+    const now = new Date()
+    
+    // If plan already expired, add days from now. Otherwise, add days to existing expiry
+    if (currentExpiry < now) {
+      newExpiryDate = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString()
+    } else {
+      newExpiryDate = new Date(currentExpiry.getTime() + days * 24 * 60 * 60 * 1000).toISOString()
+    }
+  } else {
+    // No existing expiry, add days from now
+    newExpiryDate = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString()
+  }
+  
+  return db.prepare('UPDATE users SET plan_expiry_date = ? WHERE id = ?').run(newExpiryDate, userId)
+}
+
+function isUserPlanExpired(expiryDate) {
+  if (!expiryDate) return true // No expiry date means expired
+  return new Date() > new Date(expiryDate)
+}
+
+function approveUserWithPlan(userId, days) {
+  const expiryDate = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString()
+  return db.prepare('UPDATE users SET status = ?, plan_expiry_date = ? WHERE id = ?')
+    .run('approved', expiryDate, userId)
 }
 
 // User Serials Management
@@ -530,5 +585,10 @@ module.exports = {
   // Login history
   logLogin,
   getUserLoginHistory,
-  getUserLoginStats
+  getUserLoginStats,
+  // Plan management
+  updateUserPlanDays,
+  extendUserPlanDays,
+  isUserPlanExpired,
+  approveUserWithPlan
 }

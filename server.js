@@ -31,7 +31,11 @@ const {
   updateSessionActivity,
   logLogin,
   getUserLoginHistory,
-  getUserLoginStats
+  getUserLoginStats,
+  updateUserPlanDays,
+  extendUserPlanDays,
+  isUserPlanExpired,
+  approveUserWithPlan
 } = require('./db')
 
 const app = express()
@@ -56,6 +60,15 @@ function verifyAuth(req) {
   const session = getSessionByToken(token)
   if (!session) return null
   if (session.status !== 'approved' && session.status !== 'admin') return null
+  
+  // Check plan expiry for approved users (admins bypass this check)
+  if (session.status === 'approved') {
+    const user = db.prepare('SELECT plan_expiry_date FROM users WHERE id = ?').get(session.user_id)
+    if (user && isUserPlanExpired(user.plan_expiry_date)) {
+      return { expired: true, id: session.user_id }
+    }
+  }
+  
   updateSessionActivity(token)
   return {
     id: session.user_id,
@@ -211,6 +224,11 @@ app.get('/api/auth/status', (req, res) => {
       return res.json({ status: 'admin', user: { id: session.user_id, name: session.name, email: session.email, whatsapp: session.whatsapp, status: 'admin' } })
     }
     if (session.status === 'approved') {
+      // Check if plan is expired for approved users
+      const user = db.prepare('SELECT plan_expiry_date FROM users WHERE id = ?').get(session.user_id)
+      if (user && isUserPlanExpired(user.plan_expiry_date)) {
+        return res.json({ status: 'expired', user: { id: session.user_id, name: session.name, email: session.email, whatsapp: session.whatsapp } })
+      }
       return res.json({ status: 'approved', user: { id: session.user_id, name: session.name, email: session.email, whatsapp: session.whatsapp, status: 'approved' } })
     }
     if (session.status === 'pending') {
@@ -226,6 +244,7 @@ app.get('/api/serials', (req, res) => {
   try {
     const user = verifyAuth(req)
     if (!user) return res.status(401).json({ error: 'Unauthorized' })
+    if (user.expired) return res.status(403).json({ error: 'Plan expired' })
     // Return only serials that the user has added
     const serials = getUserSerials(user.email)
     res.json({ serials })
@@ -238,6 +257,7 @@ app.get('/api/serials/available', (req, res) => {
   try {
     const user = verifyAuth(req)
     if (!user) return res.status(401).json({ error: 'Unauthorized' })
+    if (user.expired) return res.status(403).json({ error: 'Plan expired' })
     // Return all serials in database for the "Add Serial" modal
     const allSerials = getAllAvailableSerials()
     // Mark which serials the user has already added
@@ -255,6 +275,7 @@ app.post('/api/serials/add', (req, res) => {
   try {
     const user = verifyAuth(req)
     if (!user) return res.status(401).json({ error: 'Unauthorized' })
+    if (user.expired) return res.status(403).json({ error: 'Plan expired' })
     const { serialId } = req.body || {}
     if (!serialId) return res.status(400).json({ error: 'Missing serial ID' })
 
@@ -279,6 +300,7 @@ app.delete('/api/serials/remove/:serialId', (req, res) => {
   try {
     const user = verifyAuth(req)
     if (!user) return res.status(401).json({ error: 'Unauthorized' })
+    if (user.expired) return res.status(403).json({ error: 'Plan expired' })
     const { serialId } = req.params
 
     if (!serialId) return res.status(400).json({ error: 'Missing serial ID' })
@@ -300,6 +322,7 @@ app.post('/api/download', (req, res) => {
   try {
     const user = verifyAuth(req)
     if (!user) return res.status(401).json({ error: 'Unauthorized' })
+    if (user.expired) return res.status(403).json({ error: 'Plan expired' })
     const { serialId, type } = req.body || {}
     if (!serialId || !type) return res.status(400).json({ error: 'Missing parameters' })
     const serial = getSerialById(serialId)
@@ -354,6 +377,7 @@ app.get('/api/download/file', (req, res) => {
   try {
     const user = verifyAuth(req)
     if (!user) return res.status(401).json({ error: 'Unauthorized' })
+    if (user.expired) return res.status(403).json({ error: 'Plan expired' })
     const serialId = req.query.serialId
     const typeParam = req.query.type
     if (!serialId) return res.status(400).json({ error: 'Missing serialId' })
@@ -413,9 +437,11 @@ app.post('/api/admin/users/:id/approve', (req, res) => {
     if (!admin) return res.status(401).json({ error: 'Unauthorized' })
     const userId = Number(req.params.id)
     if (!userId) return res.status(400).json({ error: 'Invalid user id' })
-    const result = updateUserStatus(userId, 'approved')
+    const { days } = req.body || {}
+    const planDays = days && !isNaN(days) ? Number(days) : 3 // Default to 3 days
+    const result = approveUserWithPlan(userId, planDays)
     if (!result.changes) return res.status(404).json({ error: 'User not found' })
-    res.json({ success: true, userId })
+    res.json({ success: true, userId, days: planDays })
   } catch (e) {
     res.status(500).json({ error: 'Internal server error' })
   }
@@ -486,6 +512,23 @@ app.patch('/api/admin/users/:id/wa-noti', (req, res) => {
     const result = updateUserWaNoti(userId, waNoti ? 1 : 0)
     if (!result.changes) return res.status(404).json({ error: 'User not found' })
     res.json({ success: true, userId, waNoti: waNoti ? 1 : 0 })
+  } catch (e) {
+    res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
+app.post('/api/admin/users/:id/extend-plan', (req, res) => {
+  try {
+    const admin = verifyAdmin(req)
+    if (!admin) return res.status(401).json({ error: 'Unauthorized' })
+    const userId = Number(req.params.id)
+    if (!userId) return res.status(400).json({ error: 'Invalid user id' })
+    const { days } = req.body || {}
+    if (!days || isNaN(days)) return res.status(400).json({ error: 'Missing or invalid days field' })
+
+    const result = extendUserPlanDays(userId, Number(days))
+    if (!result.changes) return res.status(404).json({ error: 'User not found' })
+    res.json({ success: true, userId, days: Number(days) })
   } catch (e) {
     res.status(500).json({ error: 'Internal server error' })
   }

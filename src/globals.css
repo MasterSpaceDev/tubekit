@@ -1125,12 +1125,22 @@ body {
 
 .admin-user-card.pending {
   border-color: rgba(251, 191, 36, 0.3);
+  background: rgba(251, 191, 36, 0.03);
+}
+
+.admin-user-card.pending:hover {
+  border-color: rgba(251, 191, 36, 0.5);
+  background: rgba(251, 191, 36, 0.05);
 }
 
 .admin-user-info {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
+}
+
+.admin-user-card .admin-user-info {
+  gap: 10px;
 }
 
 .admin-user-name {
@@ -1148,11 +1158,17 @@ body {
   font-size: 13px;
   color: var(--text-muted);
   font-family: 'Courier New', monospace;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .admin-user-actions {
   display: flex;
   gap: 8px;
+  margin-top: 4px;
+  flex-wrap: wrap;
 }
 
 .admin-btn {
@@ -1349,6 +1365,168 @@ body {
   color: var(--text-muted);
 }
 
+.admin-btn-small {
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+}
+
+.admin-btn-small:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-strong);
+}
+
+.admin-user-wa-noti {
+  font-size: 13px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.admin-user-plan-days {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.admin-user-plan-days label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.admin-user-plan-days input {
+  width: 70px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  outline: none;
+  transition: all 0.15s ease;
+}
+
+.admin-user-plan-days input:focus {
+  border-color: var(--accent);
+  background: var(--surface);
+}
+
+/* Toast Notification */
+.admin-toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  z-index: 10000;
+  min-width: 320px;
+  max-width: 420px;
+  animation: slideInRight 0.3s ease;
+}
+
+.admin-toast.success {
+  border-left: 4px solid #10b981;
+}
+
+.admin-toast.error {
+  border-left: 4px solid #ef4444;
+}
+
+.admin-toast-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.admin-toast.success .admin-toast-icon {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+}
+
+.admin-toast.error .admin-toast-icon {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
+.admin-toast-icon svg {
+  width: 20px;
+  height: 20px;
+  stroke-width: 2.5;
+}
+
+.admin-toast-message {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+  line-height: 1.4;
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* Improved Admin User Row Styling */
+.admin-user-row .admin-user-info {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.admin-user-row .admin-user-info > span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Better spacing for approved users section */
+.admin-subsection {
+  margin-bottom: 32px;
+}
+
+.admin-subsection:last-child {
+  margin-bottom: 0;
+}
+
+/* Improved plan status badge */
+.admin-user-row .admin-user-info > span:last-child {
+  margin-left: auto;
+  padding: 6px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
 /* Mobile Responsive */
 @media (max-width: 768px) {
   .admin-container {
@@ -1375,13 +1553,26 @@ body {
   .admin-user-row .admin-user-info {
     flex-direction: column;
     align-items: flex-start;
-    gap: 6px;
+    gap: 8px;
+    width: 100%;
   }
 
   .admin-user-row .admin-user-name,
   .admin-user-row .admin-user-email,
   .admin-user-row .admin-user-whatsapp {
     min-width: 0;
+  }
+
+  .admin-user-row .admin-user-info > span:last-child {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .admin-user-meta {
+    width: 100%;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
   }
 
   .admin-serial-row {
@@ -1401,6 +1592,22 @@ body {
 
   .admin-tabs {
     overflow-x: auto;
+  }
+
+  .admin-toast {
+    right: 16px;
+    left: 16px;
+    min-width: auto;
+    max-width: none;
+  }
+
+  .admin-user-actions {
+    width: 100%;
+  }
+
+  .admin-user-actions .admin-btn {
+    flex: 1;
+    min-width: 0;
   }
 }
 
