@@ -442,17 +442,18 @@ app.delete('/api/admin/users/:id', (req, res) => {
     const userId = Number(req.params.id)
     if (!userId) return res.status(400).json({ error: 'Invalid user id' })
 
-    // Delete user's serial subscriptions first
-    db.prepare('DELETE FROM user_serials WHERE user_id = ?').run(userId)
-    // Delete user's download logs
+    db.prepare('DELETE FROM user_serials WHERE user_email = (SELECT email FROM users WHERE id = ?)').run(userId)
     db.prepare('DELETE FROM download_logs WHERE user_id = ?').run(userId)
-    // Delete user
+    db.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId)
+    db.prepare('DELETE FROM login_history WHERE user_id = ?').run(userId)
+    db.prepare('DELETE FROM download_queue WHERE user_id = ?').run(userId)
     const result = db.prepare('DELETE FROM users WHERE id = ?').run(userId)
 
     if (!result.changes) return res.status(404).json({ error: 'User not found' })
     res.json({ success: true, userId })
   } catch (e) {
-    res.status(500).json({ error: 'Internal server error' })
+    console.error('Delete user error:', e)
+    res.status(500).json({ error: 'Internal server error', details: process.env.NODE_ENV === 'development' ? e.message : undefined })
   }
 })
 

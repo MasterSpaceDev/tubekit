@@ -12,6 +12,7 @@ function AdminPanel() {
   const [showLoginHistory, setShowLoginHistory] = useState(false)
   const [loginHistory, setLoginHistory] = useState([])
   const [selectedUserId, setSelectedUserId] = useState(null)
+  const [selectedUserName, setSelectedUserName] = useState('')
 
   useEffect(() => {
     fetch('/api/auth/status', { credentials: 'include' })
@@ -97,10 +98,15 @@ function AdminPanel() {
         window.location.href = '/login?message=session-expired'
         return
       }
+      if (!r.ok) {
+        const data = await r.json()
+        alert(data.error || 'Failed to delete user')
+        return
+      }
       loadData()
     } catch (err) {
       console.error('Failed to delete user:', err)
-      alert('Failed to delete user')
+      alert('Failed to delete user: ' + err.message)
     }
   }
 
@@ -142,6 +148,27 @@ function AdminPanel() {
     } catch (err) {
       console.error('Failed to toggle wa_noti:', err)
       alert('Failed to toggle WhatsApp notification')
+    }
+  }
+
+  const loadLoginHistory = async (userId, userName) => {
+    try {
+      const r = await fetch(`/api/admin/users/${userId}/login-history`, { credentials: 'include' })
+      if (r.status === 401) {
+        window.location.href = '/login?message=session-expired'
+        return
+      }
+      if (!r.ok) {
+        throw new Error('Failed to load login history')
+      }
+      const data = await r.json()
+      setSelectedUserId(userId)
+      setSelectedUserName(userName)
+      setLoginHistory(data.history || [])
+      setShowLoginHistory(true)
+    } catch (err) {
+      console.error('Failed to load login history:', err)
+      alert('Failed to load login history')
     }
   }
 
@@ -315,44 +342,35 @@ function AdminPanel() {
                         </span>
                       </div>
                       <div className="admin-user-meta">
-                        <span className="admin-user-downloads">
-                          {user.totalDownloads || 0} downloads
-                        </span>
-                        <span className="admin-user-login-stats">
-                          {user.total_logins || 0} logins | {user.unique_devices || 0} devices | {user.unique_ips || 0} IPs
-                        </span>
-                        <button
-                          className="admin-btn-icon"
-                          onClick={() => {
-                            setSelectedUserId(user.id)
-                            fetch(`/api/admin/users/${user.id}/login-history`, { credentials: 'include' })
-                              .then(r => {
-                                if (r.status === 401) {
-                                  window.location.href = '/login?message=session-expired'
-                                  return
-                                }
-                                return r.json()
-                              })
-                              .then(data => {
-                                if (!data) return
-                                setLoginHistory(data.history || [])
-                                setShowLoginHistory(true)
-                              })
-                          }}
-                          title="View login history"
-                        >
-                          📊
-                        </button>
-                        <button
-                          className="admin-btn-icon delete"
-                          onClick={() => deleteUser(user.id, user.name)}
-                          title="Delete user"
-                        >
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <polyline points="3 6 5 6 21 6"></polyline>
-                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                          </svg>
-                        </button>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '12px', color: '#64748b' }}>
+                          <span className="admin-user-downloads">
+                            {user.totalDownloads || 0} downloads
+                          </span>
+                          <span className="admin-user-login-stats">
+                            {user.total_logins || 0} logins • {user.unique_devices || 0} devices • {user.unique_ips || 0} IPs
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                          <button
+                            className="admin-btn-icon"
+                            onClick={() => loadLoginHistory(user.id, user.name)}
+                            title="View login history"
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M3 3h18v18H3zM9 9h6M9 15h6M9 12h6"/>
+                            </svg>
+                          </button>
+                          <button
+                            className="admin-btn-icon delete"
+                            onClick={() => deleteUser(user.id, user.name)}
+                            title="Delete user"
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <polyline points="3 6 5 6 21 6"></polyline>
+                              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                            </svg>
+                          </button>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -442,7 +460,7 @@ function AdminPanel() {
             </button>
             <div className="modal-hdr">
               <div className="modal-title">Login History</div>
-              <div className="modal-subtitle">Complete login timeline for user</div>
+              <div className="modal-subtitle">{selectedUserName ? `Complete login timeline for ${selectedUserName}` : 'Complete login timeline for user'}</div>
             </div>
             <div style={{ padding: '20px' }}>
               {loginHistory.length === 0 ? (
