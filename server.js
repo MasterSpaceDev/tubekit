@@ -130,7 +130,7 @@ app.get('/api/serials', (req, res) => {
     const user = verifyAuth(req)
     if (!user) return res.status(401).json({ error: 'Unauthorized' })
     // Return only serials that the user has added
-    const serials = getUserSerials(user.id)
+    const serials = getUserSerials(user.email)
     res.json({ serials })
   } catch (e) {
     res.status(500).json({ error: 'Internal server error' })
@@ -146,7 +146,7 @@ app.get('/api/serials/available', (req, res) => {
     // Mark which serials the user has already added
     const serialsWithStatus = allSerials.map(serial => ({
       ...serial,
-      isAdded: isSerialAddedByUser(user.id, serial.id)
+      isAdded: isSerialAddedByUser(user.email, serial.id)
     }))
     res.json({ serials: serialsWithStatus })
   } catch (e) {
@@ -166,7 +166,7 @@ app.post('/api/serials/add', (req, res) => {
     if (!serial) return res.status(404).json({ error: 'Serial not found' })
 
     // Add serial to user's list
-    const result = addSerialToUser(user.id, serialId)
+    const result = addSerialToUser(user.email, serialId)
 
     if (result.error) {
       return res.status(400).json({ error: result.error })
@@ -187,7 +187,7 @@ app.delete('/api/serials/remove/:serialId', (req, res) => {
     if (!serialId) return res.status(400).json({ error: 'Missing serial ID' })
 
     // Remove serial from user's list
-    const result = removeSerialFromUser(user.id, serialId)
+    const result = removeSerialFromUser(user.email, serialId)
 
     if (result.changes === 0) {
       return res.status(404).json({ error: 'Serial not found in your list' })

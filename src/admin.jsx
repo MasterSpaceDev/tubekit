@@ -8,6 +8,7 @@ function AdminPanel() {
   const [stats, setStats] = useState({})
   const [users, setUsers] = useState([])
   const [serials, setSerials] = useState([])
+  const [serialsPage, setSerialsPage] = useState(0)
 
   useEffect(() => {
     // Check admin auth
@@ -32,7 +33,7 @@ function AdminPanel() {
 
       setStats(statsData.overview || {})
       setUsers(statsData.users || [])
-      setSerials((statsData.serials || []).slice(0, 50))
+      setSerials(statsData.serials || [])
     } catch (err) {
       console.error('Failed to load admin data:', err)
     }
@@ -170,6 +171,9 @@ function AdminPanel() {
                         {user.whatsapp && (
                           <div className="admin-user-whatsapp">{user.whatsapp}</div>
                         )}
+                        <div className="admin-user-wa-noti">
+                          WA Notification: {user.wa_noti ? 'Enabled' : 'Disabled'}
+                        </div>
                       </div>
                       <div className="admin-user-actions">
                         <button
@@ -213,6 +217,9 @@ function AdminPanel() {
                         {user.whatsapp && (
                           <span className="admin-user-whatsapp">{user.whatsapp}</span>
                         )}
+                        <span className="admin-user-wa-noti">
+                          WA: {user.wa_noti ? 'ON' : 'OFF'}
+                        </span>
                       </div>
                       <div className="admin-user-meta">
                         <span className="admin-user-downloads">
@@ -263,10 +270,10 @@ function AdminPanel() {
           <div className="admin-section">
             <div className="admin-subsection">
               <div className="admin-subsection-title">
-                All Serials ({serials.length})
+                Top Downloading Serials ({serials.length} total)
               </div>
               <div className="admin-serial-list">
-                {serials.map(serial => (
+                {serials.slice(serialsPage * 30, (serialsPage + 1) * 30).map(serial => (
                   <div key={serial.id} className="admin-serial-row">
                     <div className="admin-serial-info">
                       <span className="admin-serial-name">{serial.name}</span>
@@ -280,6 +287,27 @@ function AdminPanel() {
                   </div>
                 ))}
               </div>
+              {serials.length > 30 && (
+                <div className="admin-pagination">
+                  <button
+                    className="admin-btn"
+                    onClick={() => setSerialsPage(Math.max(0, serialsPage - 1))}
+                    disabled={serialsPage === 0}
+                  >
+                    Previous
+                  </button>
+                  <span className="admin-pagination-info">
+                    Page {serialsPage + 1} of {Math.ceil(serials.length / 30)}
+                  </span>
+                  <button
+                    className="admin-btn"
+                    onClick={() => setSerialsPage(Math.min(Math.ceil(serials.length / 30) - 1, serialsPage + 1))}
+                    disabled={serialsPage >= Math.ceil(serials.length / 30) - 1}
+                  >
+                    Next
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}

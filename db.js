@@ -74,6 +74,61 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_user_serials_serial ON user_serials(serial_id);
 `)
 
+// Add wa_noti column to users table if it doesn't exist
+try {
+  db.exec(`ALTER TABLE users ADD COLUMN wa_noti INTEGER DEFAULT 0`)
+} catch (error) {
+  // Column already exists, ignore error
+  if (!error.message.includes('duplicate column name')) {
+    throw error
+  }
+}
+
+// Migrate user_serials table to use email instead of user_id
+try {
+  // Check if migration is needed by checking if user_email column exists
+  const tableInfo = db.prepare("PRAGMA table_info(user_serials)").all()
+  const hasUserEmail = tableInfo.some(col => col.name === 'user_email')
+
+  if (!hasUserEmail) {
+    // Create new table with user_email
+    db.exec(`
+      CREATE TABLE user_serials_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_email TEXT NOT NULL,
+        serial_id TEXT NOT NULL,
+        added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_email) REFERENCES users(email),
+        FOREIGN KEY (serial_id) REFERENCES serials(id),
+        UNIQUE(user_email, serial_id)
+      )
+    `)
+
+    // Copy data from old table, converting user_id to email
+    db.exec(`
+      INSERT INTO user_serials_new (user_email, serial_id, added_at)
+      SELECT u.email, us.serial_id, us.added_at
+      FROM user_serials us
+      JOIN users u ON us.user_id = u.id
+    `)
+
+    // Drop old table
+    db.exec(`DROP TABLE user_serials`)
+
+    // Rename new table
+    db.exec(`ALTER TABLE user_serials_new RENAME TO user_serials`)
+
+    // Recreate indexes
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_user_serials_user ON user_serials(user_email);
+      CREATE INDEX IF NOT EXISTS idx_user_serials_serial ON user_serials(serial_id);
+    `)
+  }
+} catch (error) {
+  console.error('Error migrating user_serials table:', error)
+  throw error
+}
+
 function getSerials() {
   return db.prepare(`
     SELECT s.*, p.name as platform_name, p.slug as platform_slug
@@ -189,6 +244,7 @@ function getUserDownloadStats() {
       u.email,
       u.whatsapp,
       u.status,
+      u.wa_noti,
       u.created_at,
       COUNT(dl.id) AS totalDownloads,
       COALESCE(SUM(CASE
@@ -217,15 +273,15 @@ function getUsers() {
 }
 
 // User Serials Management
-function getUserSerials(userId) {
+function getUserSerials(userEmail) {
   return db.prepare(`
     SELECT s.*, p.name as platform_name, p.slug as platform_slug, us.added_at
     FROM user_serials us
     JOIN serials s ON us.serial_id = s.id
     JOIN platforms p ON s.platform_id = p.id
-    WHERE us.user_id = ?
+    WHERE us.user_email = ?
     ORDER BY us.added_at DESC
-  `).all(userId)
+  `).all(userEmail)
 }
 
 function getAllAvailableSerials() {
@@ -237,11 +293,11 @@ function getAllAvailableSerials() {
   `).all()
 }
 
-function addSerialToUser(userId, serialId) {
+function addSerialToUser(userEmail, serialId) {
   try {
     return db.prepare(
-      'INSERT INTO user_serials (user_id, serial_id) VALUES (?, ?)'
-    ).run(userId, serialId)
+      'INSERT INTO user_serials (user_email, serial_id) VALUES (?, ?)'
+    ).run(userEmail, serialId)
   } catch (error) {
     if (error.code === 'SQLITE_CONSTRAINT') {
       return { changes: 0, error: 'Serial already added' }
@@ -250,16 +306,16 @@ function addSerialToUser(userId, serialId) {
   }
 }
 
-function removeSerialFromUser(userId, serialId) {
+function removeSerialFromUser(userEmail, serialId) {
   return db.prepare(
-    'DELETE FROM user_serials WHERE user_id = ? AND serial_id = ?'
-  ).run(userId, serialId)
+    'DELETE FROM user_serials WHERE user_email = ? AND serial_id = ?'
+  ).run(userEmail, serialId)
 }
 
-function isSerialAddedByUser(userId, serialId) {
+function isSerialAddedByUser(userEmail, serialId) {
   const result = db.prepare(
-    'SELECT 1 FROM user_serials WHERE user_id = ? AND serial_id = ?'
-  ).get(userId, serialId)
+    'SELECT 1 FROM user_serials WHERE user_email = ? AND serial_id = ?'
+  ).get(userEmail, serialId)
   return !!result
 }
 
