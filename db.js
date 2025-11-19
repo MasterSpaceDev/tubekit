@@ -14,7 +14,8 @@ db.exec(`
     hash TEXT UNIQUE,
     status TEXT DEFAULT 'pending',
     wa_noti INTEGER DEFAULT 0,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    plan_expiry_date TEXT
   );
 
   CREATE TABLE IF NOT EXISTS platforms (
@@ -105,110 +106,12 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_login_history_timestamp ON login_history(timestamp);
 `)
 
-// Fix column order and data corruption issues
 try {
   const tableInfo = db.prepare("PRAGMA table_info(users)").all()
-  const columnNames = tableInfo.map(col => col.name)
-  
-  // Check if we need to fix column order or if plan_expiry_date is missing
-  const hasPlanExpiry = columnNames.includes('plan_expiry_date')
-  const hashColumn = tableInfo.find(col => col.name === 'hash')
-  
-  // If hash column has NOT NULL constraint, fix it
-  if (hashColumn && hashColumn.notnull === 1) {
-    db.exec(`
-      PRAGMA foreign_keys=off;
-      BEGIN TRANSACTION;
-      CREATE TABLE users_new (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        email TEXT UNIQUE NOT NULL,
-        whatsapp TEXT,
-        password TEXT,
-        hash TEXT UNIQUE,
-        status TEXT DEFAULT 'pending',
-        wa_noti INTEGER DEFAULT 0,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      );
-      INSERT INTO users_new (id, name, email, whatsapp, password, hash, status, wa_noti, created_at)
-      SELECT id, name, email, whatsapp, password, hash, status, wa_noti, created_at FROM users;
-      DROP TABLE users;
-      ALTER TABLE users_new RENAME TO users;
-      COMMIT;
-      PRAGMA foreign_keys=on;
-    `)
-    console.log('Fixed users table schema (removed NOT NULL from hash)')
-  }
-  
-  // Add plan_expiry_date column if it doesn't exist
-  const updatedTableInfo = db.prepare("PRAGMA table_info(users)").all()
-  const planExpiryColumn = updatedTableInfo.find(col => col.name === 'plan_expiry_date')
+  const planExpiryColumn = tableInfo.find(col => col.name === 'plan_expiry_date')
   if (!planExpiryColumn) {
     db.exec('ALTER TABLE users ADD COLUMN plan_expiry_date TEXT')
     console.log('Added plan_expiry_date column to users table')
-  }
-  
-  // Fix any corrupted data where wa_noti has date strings or created_at has wrong values
-  // This happens when columns got swapped during migration
-  try {
-    const allUsers = db.prepare('SELECT id, wa_noti, created_at FROM users').all()
-    let fixedCount = 0
-    
-    for (const user of allUsers) {
-      let needsFix = false
-      let fixedWaNoti = user.wa_noti
-      let fixedCreatedAt = user.created_at
-      
-      // Check if wa_noti is a date string (should be integer 0 or 1)
-      if (typeof user.wa_noti === 'string' && (user.wa_noti.includes('-') || user.wa_noti.includes(':'))) {
-        // This is a date, swap it to created_at
-        fixedCreatedAt = user.wa_noti
-        fixedWaNoti = 0 // Default to disabled
-        needsFix = true
-      } else if (typeof user.wa_noti !== 'number' && user.wa_noti !== null) {
-        // Not a number and not null, try to convert or default
-        const num = parseInt(user.wa_noti)
-        if (!isNaN(num)) {
-          fixedWaNoti = num
-          needsFix = true
-        } else {
-          fixedWaNoti = 0
-          needsFix = true
-        }
-      }
-      
-      // Check if created_at is a number (should be date string)
-      if (typeof user.created_at === 'number') {
-        // This might be wa_noti value, but we already handled wa_noti above
-        // If wa_noti was a date, we already swapped it
-        // Otherwise, this created_at number might actually be wa_noti
-        if (!needsFix && (user.created_at === 0 || user.created_at === 1)) {
-          // This might be wa_noti in wrong column
-          fixedWaNoti = user.created_at
-          fixedCreatedAt = new Date().toISOString().replace('T', ' ').substring(0, 19)
-          needsFix = true
-        } else if (needsFix && !fixedCreatedAt) {
-          // We fixed wa_noti but created_at is still wrong
-          fixedCreatedAt = new Date().toISOString().replace('T', ' ').substring(0, 19)
-        }
-      } else if (!user.created_at || user.created_at === null) {
-        // Missing created_at, set a default
-        fixedCreatedAt = new Date().toISOString().replace('T', ' ').substring(0, 19)
-        needsFix = true
-      }
-      
-      if (needsFix) {
-        db.prepare('UPDATE users SET wa_noti = ?, created_at = ? WHERE id = ?')
-          .run(fixedWaNoti, fixedCreatedAt, user.id)
-        fixedCount++
-      }
-    }
-    
-    if (fixedCount > 0) {
-      console.log(`Fixed ${fixedCount} corrupted user records`)
-    }
-  } catch (fixError) {
-    console.error('Error fixing corrupted data:', fixError.message)
   }
 } catch (migrationError) {
   console.error('Schema migration error (non-critical):', migrationError.message)
@@ -381,15 +284,12 @@ function updateUserWaNoti(userId, waNoti) {
   return db.prepare('UPDATE users SET wa_noti = ? WHERE id = ?').run(waNoti, userId)
 }
 
-// Plan Management Functions
 function updateUserPlanDays(userId, days) {
-  // Calculate expiry date by adding days from now
   const expiryDate = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString()
   return db.prepare('UPDATE users SET plan_expiry_date = ? WHERE id = ?').run(expiryDate, userId)
 }
 
 function extendUserPlanDays(userId, days) {
-  // Get current expiry date
   const user = db.prepare('SELECT plan_expiry_date FROM users WHERE id = ?').get(userId)
   if (!user) return { changes: 0 }
   
@@ -398,14 +298,12 @@ function extendUserPlanDays(userId, days) {
     const currentExpiry = new Date(user.plan_expiry_date)
     const now = new Date()
     
-    // If plan already expired, add days from now. Otherwise, add days to existing expiry
     if (currentExpiry < now) {
       newExpiryDate = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString()
     } else {
       newExpiryDate = new Date(currentExpiry.getTime() + days * 24 * 60 * 60 * 1000).toISOString()
     }
   } else {
-    // No existing expiry, add days from now
     newExpiryDate = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString()
   }
   
@@ -413,7 +311,7 @@ function extendUserPlanDays(userId, days) {
 }
 
 function isUserPlanExpired(expiryDate) {
-  if (!expiryDate) return true // No expiry date means expired
+  if (!expiryDate) return true
   return new Date() > new Date(expiryDate)
 }
 
@@ -423,7 +321,6 @@ function approveUserWithPlan(userId, days) {
     .run('approved', expiryDate, userId)
 }
 
-// User Serials Management
 function getUserSerials(userEmail) {
   return db.prepare(`
     SELECT s.*, p.name as platform_name, p.slug as platform_slug, us.added_at
@@ -470,17 +367,13 @@ function isSerialAddedByUser(userEmail, serialId) {
   return !!result
 }
 
-// Platform Management
 function getOrCreatePlatform(platformName) {
-  // Normalize platform name
   const normalized = platformName.trim()
   const slug = normalized.toLowerCase().replace(/[^a-z0-9]+/g, '')
 
-  // Try to find existing platform
   let platform = db.prepare('SELECT * FROM platforms WHERE name = ? OR slug = ?').get(normalized, slug)
 
   if (!platform) {
-    // Create new platform
     const result = db.prepare('INSERT INTO platforms (name, slug) VALUES (?, ?)').run(normalized, slug)
     platform = { id: result.lastInsertRowid, name: normalized, slug }
   }
@@ -488,24 +381,18 @@ function getOrCreatePlatform(platformName) {
   return platform
 }
 
-// Serial Management
 function createOrUpdateSerial(serialName, platformName, url, date) {
-  // Generate serial_id slug from serial name
   const serialId = serialName.toLowerCase()
-    .replace(/[^\w\s-]/g, '') // Remove special characters except spaces and hyphens
-    .replace(/\s+/g, '_')      // Replace spaces with underscores
-    .replace(/-+/g, '_')       // Replace hyphens with underscores
-    .replace(/_+/g, '_')       // Replace multiple underscores with single
-    .replace(/^_|_$/g, '')     // Remove leading/trailing underscores
+    .replace(/[^\w\s-]/g, '')
+    .replace(/\s+/g, '_')
+    .replace(/-+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_|_$/g, '')
 
-  // Get or create platform
   const platform = getOrCreatePlatform(platformName)
-
-  // Check if serial exists
   const existingSerial = getSerialById(serialId)
 
   if (existingSerial) {
-    // Update existing serial (clear old download URLs for new episode)
     updateSerial(serialId, {
       url,
       date,
@@ -514,7 +401,6 @@ function createOrUpdateSerial(serialName, platformName, url, date) {
       bypass_progress: 0
     })
   } else {
-    // Create new serial
     db.prepare(`
       INSERT INTO serials (id, platform_id, name, url, date)
       VALUES (?, ?, ?, ?, ?)
@@ -635,26 +521,21 @@ module.exports = {
   getUsers,
   updateUserWhatsApp,
   updateUserWaNoti,
-  // User serials management
   getUserSerials,
   getAllAvailableSerials,
   addSerialToUser,
   removeSerialFromUser,
   isSerialAddedByUser,
-  // Platform & serial creation
   getOrCreatePlatform,
   createOrUpdateSerial,
-  // Session management
   createSession,
   getSessionByToken,
   deleteSession,
   deleteUserSessions,
   updateSessionActivity,
-  // Login history
   logLogin,
   getUserLoginHistory,
   getUserLoginStats,
-  // Plan management
   updateUserPlanDays,
   extendUserPlanDays,
   isUserPlanExpired,
