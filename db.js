@@ -105,9 +105,16 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_login_history_timestamp ON login_history(timestamp);
 `)
 
+// Fix column order and data corruption issues
 try {
   const tableInfo = db.prepare("PRAGMA table_info(users)").all()
+  const columnNames = tableInfo.map(col => col.name)
+  
+  // Check if we need to fix column order or if plan_expiry_date is missing
+  const hasPlanExpiry = columnNames.includes('plan_expiry_date')
   const hashColumn = tableInfo.find(col => col.name === 'hash')
+  
+  // If hash column has NOT NULL constraint, fix it
   if (hashColumn && hashColumn.notnull === 1) {
     db.exec(`
       PRAGMA foreign_keys=off;
@@ -123,27 +130,88 @@ try {
         wa_noti INTEGER DEFAULT 0,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
-      INSERT INTO users_new SELECT * FROM users;
+      INSERT INTO users_new (id, name, email, whatsapp, password, hash, status, wa_noti, created_at)
+      SELECT id, name, email, whatsapp, password, hash, status, wa_noti, created_at FROM users;
       DROP TABLE users;
       ALTER TABLE users_new RENAME TO users;
       COMMIT;
       PRAGMA foreign_keys=on;
     `)
+    console.log('Fixed users table schema (removed NOT NULL from hash)')
   }
-} catch (migrationError) {
-  console.error('Schema migration error (non-critical):', migrationError.message)
-}
-
-// Add plan_expiry_date column if it doesn't exist
-try {
-  const tableInfo = db.prepare("PRAGMA table_info(users)").all()
-  const planExpiryColumn = tableInfo.find(col => col.name === 'plan_expiry_date')
+  
+  // Add plan_expiry_date column if it doesn't exist
+  const updatedTableInfo = db.prepare("PRAGMA table_info(users)").all()
+  const planExpiryColumn = updatedTableInfo.find(col => col.name === 'plan_expiry_date')
   if (!planExpiryColumn) {
     db.exec('ALTER TABLE users ADD COLUMN plan_expiry_date TEXT')
     console.log('Added plan_expiry_date column to users table')
   }
+  
+  // Fix any corrupted data where wa_noti has date strings or created_at has wrong values
+  // This happens when columns got swapped during migration
+  try {
+    const allUsers = db.prepare('SELECT id, wa_noti, created_at FROM users').all()
+    let fixedCount = 0
+    
+    for (const user of allUsers) {
+      let needsFix = false
+      let fixedWaNoti = user.wa_noti
+      let fixedCreatedAt = user.created_at
+      
+      // Check if wa_noti is a date string (should be integer 0 or 1)
+      if (typeof user.wa_noti === 'string' && (user.wa_noti.includes('-') || user.wa_noti.includes(':'))) {
+        // This is a date, swap it to created_at
+        fixedCreatedAt = user.wa_noti
+        fixedWaNoti = 0 // Default to disabled
+        needsFix = true
+      } else if (typeof user.wa_noti !== 'number' && user.wa_noti !== null) {
+        // Not a number and not null, try to convert or default
+        const num = parseInt(user.wa_noti)
+        if (!isNaN(num)) {
+          fixedWaNoti = num
+          needsFix = true
+        } else {
+          fixedWaNoti = 0
+          needsFix = true
+        }
+      }
+      
+      // Check if created_at is a number (should be date string)
+      if (typeof user.created_at === 'number') {
+        // This might be wa_noti value, but we already handled wa_noti above
+        // If wa_noti was a date, we already swapped it
+        // Otherwise, this created_at number might actually be wa_noti
+        if (!needsFix && (user.created_at === 0 || user.created_at === 1)) {
+          // This might be wa_noti in wrong column
+          fixedWaNoti = user.created_at
+          fixedCreatedAt = new Date().toISOString().replace('T', ' ').substring(0, 19)
+          needsFix = true
+        } else if (needsFix && !fixedCreatedAt) {
+          // We fixed wa_noti but created_at is still wrong
+          fixedCreatedAt = new Date().toISOString().replace('T', ' ').substring(0, 19)
+        }
+      } else if (!user.created_at || user.created_at === null) {
+        // Missing created_at, set a default
+        fixedCreatedAt = new Date().toISOString().replace('T', ' ').substring(0, 19)
+        needsFix = true
+      }
+      
+      if (needsFix) {
+        db.prepare('UPDATE users SET wa_noti = ?, created_at = ? WHERE id = ?')
+          .run(fixedWaNoti, fixedCreatedAt, user.id)
+        fixedCount++
+      }
+    }
+    
+    if (fixedCount > 0) {
+      console.log(`Fixed ${fixedCount} corrupted user records`)
+    }
+  } catch (fixError) {
+    console.error('Error fixing corrupted data:', fixError.message)
+  }
 } catch (migrationError) {
-  console.error('Plan expiry migration error (non-critical):', migrationError.message)
+  console.error('Schema migration error (non-critical):', migrationError.message)
 }
 
 function getSerials() {
