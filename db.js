@@ -99,7 +99,6 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_download_logs_serial ON download_logs(serial_id);
   CREATE INDEX IF NOT EXISTS idx_download_logs_user ON download_logs(user_id);
   CREATE INDEX IF NOT EXISTS idx_download_logs_downloaded_at ON download_logs(downloaded_at);
-  CREATE INDEX IF NOT EXISTS idx_download_logs_episode ON download_logs(serial_id, user_id, episode_date);
   CREATE INDEX IF NOT EXISTS idx_user_serials_user ON user_serials(user_email);
   CREATE INDEX IF NOT EXISTS idx_user_serials_serial ON user_serials(serial_id);
   CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token);
@@ -125,17 +124,26 @@ try {
   if (!episodeDateColumn) {
     db.exec('ALTER TABLE download_logs ADD COLUMN episode_date TEXT')
     console.log('Added episode_date column to download_logs table')
-  }
-} catch (migrationError) {
-  console.error('Schema migration error (non-critical):', migrationError.message)
-}
-
-try {
-  const indexes = db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='download_logs'").all()
-  const episodeIndex = indexes.find(idx => idx.name === 'idx_download_logs_episode')
-  if (!episodeIndex) {
-    db.exec('CREATE INDEX IF NOT EXISTS idx_download_logs_episode ON download_logs(serial_id, user_id, episode_date)')
-    console.log('Added episode index to download_logs table')
+    
+    // Create the index after adding the column
+    try {
+      db.exec('CREATE INDEX IF NOT EXISTS idx_download_logs_episode ON download_logs(serial_id, user_id, episode_date)')
+      console.log('Added episode index to download_logs table')
+    } catch (indexError) {
+      console.error('Failed to create episode index:', indexError.message)
+    }
+  } else {
+    // Column exists, but check if index exists
+    try {
+      const indexes = db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='download_logs'").all()
+      const episodeIndex = indexes.find(idx => idx.name === 'idx_download_logs_episode')
+      if (!episodeIndex) {
+        db.exec('CREATE INDEX IF NOT EXISTS idx_download_logs_episode ON download_logs(serial_id, user_id, episode_date)')
+        console.log('Added episode index to download_logs table')
+      }
+    } catch (indexError) {
+      console.error('Failed to create episode index:', indexError.message)
+    }
   }
 } catch (migrationError) {
   console.error('Schema migration error (non-critical):', migrationError.message)
