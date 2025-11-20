@@ -584,7 +584,7 @@ function AdminPanel() {
                                 <span className="sub">{user.total_logins || 0} logins</span>
                               </div>
                               <button 
-                                className="saas-btn-icon small" 
+                                className="saas-btn-download" 
                                 onClick={() => loadUserDownloads(user.id, user.name, 'today')}
                                 title="View Downloads"
                               >
@@ -752,7 +752,7 @@ function AdminPanel() {
                               <span className="sub">{user.total_logins || 0} logins</span>
                             </div>
                             <button 
-                              className="saas-btn-icon small" 
+                              className="saas-btn-download" 
                               onClick={() => loadUserDownloads(user.id, user.name, 'today')}
                               title="View Downloads"
                             >
