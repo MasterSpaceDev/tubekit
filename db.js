@@ -118,35 +118,16 @@ try {
   console.error('Schema migration error (non-critical):', migrationError.message)
 }
 
+// Ensure episode_date index exists (column is already in CREATE TABLE for new databases)
 try {
-  const downloadLogsInfo = db.prepare("PRAGMA table_info(download_logs)").all()
-  const episodeDateColumn = downloadLogsInfo.find(col => col.name === 'episode_date')
-  if (!episodeDateColumn) {
-    db.exec('ALTER TABLE download_logs ADD COLUMN episode_date TEXT')
-    console.log('Added episode_date column to download_logs table')
-    
-    // Create the index after adding the column
-    try {
-      db.exec('CREATE INDEX IF NOT EXISTS idx_download_logs_episode ON download_logs(serial_id, user_id, episode_date)')
-      console.log('Added episode index to download_logs table')
-    } catch (indexError) {
-      console.error('Failed to create episode index:', indexError.message)
-    }
-  } else {
-    // Column exists, but check if index exists
-    try {
-      const indexes = db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='download_logs'").all()
-      const episodeIndex = indexes.find(idx => idx.name === 'idx_download_logs_episode')
-      if (!episodeIndex) {
-        db.exec('CREATE INDEX IF NOT EXISTS idx_download_logs_episode ON download_logs(serial_id, user_id, episode_date)')
-        console.log('Added episode index to download_logs table')
-      }
-    } catch (indexError) {
-      console.error('Failed to create episode index:', indexError.message)
-    }
+  const indexes = db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='download_logs'").all()
+  const episodeIndex = indexes.find(idx => idx.name === 'idx_download_logs_episode')
+  if (!episodeIndex) {
+    db.exec('CREATE INDEX IF NOT EXISTS idx_download_logs_episode ON download_logs(serial_id, user_id, episode_date)')
+    console.log('Added episode index to download_logs table')
   }
-} catch (migrationError) {
-  console.error('Schema migration error (non-critical):', migrationError.message)
+} catch (indexError) {
+  console.error('Failed to create episode index:', indexError.message)
 }
 
 function getSerials() {
