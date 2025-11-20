@@ -19,6 +19,7 @@ const {
   updateUserWhatsApp,
   updateUserWaNoti,
   getUserSerials,
+  getUserSerialsByUserId,
   getAllAvailableSerials,
   addSerialToUser,
   removeSerialFromUser,
@@ -413,6 +414,19 @@ app.get('/api/admin/users/:id/login-history', (req, res) => {
     if (!userId) return res.status(400).json({ error: 'Invalid user id' })
     const history = getUserLoginHistory(userId)
     res.json({ history })
+  } catch (e) {
+    res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
+app.get('/api/admin/users/:id/serials', (req, res) => {
+  try {
+    const admin = verifyAdmin(req)
+    if (!admin) return res.status(401).json({ error: 'Unauthorized' })
+    const userId = Number(req.params.id)
+    if (!userId) return res.status(400).json({ error: 'Invalid user id' })
+    const serials = getUserSerialsByUserId(userId)
+    res.json({ serials })
   } catch (e) {
     res.status(500).json({ error: 'Internal server error' })
   }

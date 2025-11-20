@@ -21,6 +21,9 @@ function AdminPanel() {
   const [whatsAppData, setWhatsAppData] = useState({ userId: null, current: '' })
   const [showExtendPlanModal, setShowExtendPlanModal] = useState(false)
   const [extendPlanData, setExtendPlanData] = useState({ userId: null, userName: '', days: '30' })
+  const [showUserSerialsModal, setShowUserSerialsModal] = useState(false)
+  const [userSerials, setUserSerials] = useState([])
+  const [selectedUserForSerials, setSelectedUserForSerials] = useState({ id: null, name: '' })
   const [toast, setToast] = useState({ show: false, message: '', type: 'success' })
 
   useEffect(() => {
@@ -276,6 +279,26 @@ function AdminPanel() {
     } catch (err) {
       console.error('Failed to extend plan:', err)
       showToast('Failed to extend plan: ' + err.message, 'error')
+    }
+  }
+
+  const loadUserSerials = async (userId, userName) => {
+    try {
+      const r = await fetch(`/api/admin/users/${userId}/serials`, { credentials: 'include' })
+      if (r.status === 401) {
+        window.location.href = '/login?message=session-expired'
+        return
+      }
+      if (!r.ok) {
+        throw new Error('Failed to load user serials')
+      }
+      const data = await r.json()
+      setSelectedUserForSerials({ id: userId, name: userName })
+      setUserSerials(data.serials || [])
+      setShowUserSerialsModal(true)
+    } catch (err) {
+      console.error('Failed to load user serials:', err)
+      showToast('Failed to load user serials', 'error')
     }
   }
 
@@ -561,6 +584,12 @@ function AdminPanel() {
                                       <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
                                     </svg>
                                   </button>
+                                  <button className="saas-btn-icon" onClick={() => loadUserSerials(user.id, user.name)} title="View Serials">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                      <rect x="2" y="7" width="20" height="15" rx="2" ry="2"></rect>
+                                      <polyline points="17 2 12 7 7 2"></polyline>
+                                    </svg>
+                                  </button>
                                   <button className="saas-btn-icon" onClick={() => loadLoginHistory(user.id, user.name)} title="History">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                       <circle cx="12" cy="12" r="10"></circle>
@@ -709,6 +738,12 @@ function AdminPanel() {
                             <button className="saas-btn-icon primary" onClick={() => showExtendPlan(user.id, user.name)} title="Extend Plan">
                               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                 <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                              </svg>
+                            </button>
+                            <button className="saas-btn-icon" onClick={() => loadUserSerials(user.id, user.name)} title="View Serials">
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <rect x="2" y="7" width="20" height="15" rx="2" ry="2"></rect>
+                                <polyline points="17 2 12 7 7 2"></polyline>
                               </svg>
                             </button>
                             <button className="saas-btn-icon" onClick={() => loadLoginHistory(user.id, user.name)} title="History">
@@ -946,6 +981,36 @@ function AdminPanel() {
                 <button className="saas-btn secondary" onClick={() => { setShowExtendPlanModal(false); setExtendPlanData({ userId: null, userName: '', days: '30' }) }}>Cancel</button>
                 <button className="saas-btn primary" onClick={extendUserPlan}>Extend</button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showUserSerialsModal && (
+        <div className="saas-modal-overlay">
+          <div className="saas-modal large">
+            <div className="saas-modal-header">
+              <h3>{selectedUserForSerials.name}'s Serials</h3>
+              <button onClick={() => { setShowUserSerialsModal(false); setUserSerials([]); setSelectedUserForSerials({ id: null, name: '' }) }}>✕</button>
+            </div>
+            <div className="saas-modal-content scrollable">
+              {userSerials.length === 0 ? (
+                <p className="text-center text-muted">No serials added yet</p>
+              ) : (
+                <div className="saas-serials-list">
+                  {userSerials.map(serial => (
+                    <div key={serial.id} className="saas-serial-item">
+                      <div className="saas-serial-item-info">
+                        <div className="saas-serial-item-name">{serial.name}</div>
+                        <div className="saas-serial-item-meta">
+                          <span className="saas-platform-badge">{serial.platform_name}</span>
+                          <span className="saas-serial-date">Added: {new Date(serial.added_at).toLocaleDateString()}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>

@@ -1598,6 +1598,50 @@ body {
   color: var(--text-muted);
 }
 
+/* Serials List */
+.saas-serials-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.saas-serial-item {
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: all 0.15s ease;
+}
+
+.saas-serial-item:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-strong);
+}
+
+.saas-serial-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.saas-serial-item-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.saas-serial-item-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.saas-serial-date {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
 .saas-timeline-row {
   display: flex;
   gap: 16px;

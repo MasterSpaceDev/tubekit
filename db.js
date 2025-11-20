@@ -376,6 +376,18 @@ function getUserSerials(userEmail) {
   `).all(userEmail)
 }
 
+function getUserSerialsByUserId(userId) {
+  return db.prepare(`
+    SELECT s.*, p.name as platform_name, p.slug as platform_slug, us.added_at
+    FROM user_serials us
+    JOIN serials s ON us.serial_id = s.id
+    JOIN platforms p ON s.platform_id = p.id
+    JOIN users u ON us.user_email = u.email
+    WHERE u.id = ?
+    ORDER BY us.added_at DESC
+  `).all(userId)
+}
+
 function getAllAvailableSerials() {
   return db.prepare(`
     SELECT s.*, p.name as platform_name, p.slug as platform_slug
@@ -566,6 +578,7 @@ module.exports = {
   updateUserWhatsApp,
   updateUserWaNoti,
   getUserSerials,
+  getUserSerialsByUserId,
   getAllAvailableSerials,
   addSerialToUser,
   removeSerialFromUser,
