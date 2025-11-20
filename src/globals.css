@@ -1642,6 +1642,98 @@ body {
   color: var(--text-muted);
 }
 
+/* Activity Cell */
+.saas-activity-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.saas-activity-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* Downloads Modal */
+.saas-download-filters {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.saas-download-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: var(--surface);
+  border-radius: var(--radius);
+  margin-bottom: 16px;
+}
+
+.saas-download-count {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.saas-download-period {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.saas-downloads-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.saas-download-item {
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: all 0.15s ease;
+}
+
+.saas-download-item:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-strong);
+}
+
+.saas-download-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.saas-download-item-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.saas-download-count-badge {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  background: rgba(59, 130, 246, 0.1);
+  padding: 2px 8px;
+  border-radius: 12px;
+}
+
+.saas-download-item-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 .saas-timeline-row {
   display: flex;
   gap: 16px;

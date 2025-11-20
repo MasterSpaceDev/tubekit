@@ -24,6 +24,11 @@ function AdminPanel() {
   const [showUserSerialsModal, setShowUserSerialsModal] = useState(false)
   const [userSerials, setUserSerials] = useState([])
   const [selectedUserForSerials, setSelectedUserForSerials] = useState({ id: null, name: '' })
+  const [showUserDownloadsModal, setShowUserDownloadsModal] = useState(false)
+  const [userDownloads, setUserDownloads] = useState([])
+  const [selectedUserForDownloads, setSelectedUserForDownloads] = useState({ id: null, name: '' })
+  const [downloadPeriod, setDownloadPeriod] = useState('today')
+  const [downloadStats, setDownloadStats] = useState({ count: 0, period: 'Today' })
   const [toast, setToast] = useState({ show: false, message: '', type: 'success' })
 
   useEffect(() => {
@@ -302,6 +307,33 @@ function AdminPanel() {
     }
   }
 
+  const loadUserDownloads = async (userId, userName, period = 'today') => {
+    try {
+      const r = await fetch(`/api/admin/users/${userId}/downloads?period=${period}`, { credentials: 'include' })
+      if (r.status === 401) {
+        window.location.href = '/login?message=session-expired'
+        return
+      }
+      if (!r.ok) {
+        throw new Error('Failed to load user downloads')
+      }
+      const data = await r.json()
+      setSelectedUserForDownloads({ id: userId, name: userName })
+      setUserDownloads(data.downloads || [])
+      setDownloadStats({ count: data.count || 0, period: data.period || 'Today' })
+      setDownloadPeriod(period)
+      setShowUserDownloadsModal(true)
+    } catch (err) {
+      console.error('Failed to load user downloads:', err)
+      showToast('Failed to load user downloads', 'error')
+    }
+  }
+
+  const changeDownloadPeriod = async (period) => {
+    if (!selectedUserForDownloads.id) return
+    await loadUserDownloads(selectedUserForDownloads.id, selectedUserForDownloads.name, period)
+  }
+
   if (authStatus === 'loading') {
     return (
       <div className="saas-loading">
@@ -547,8 +579,21 @@ function AdminPanel() {
                           </td>
                           <td>
                             <div className="saas-activity-cell">
-                              <span>{user.totalDownloads || 0} DLs</span>
-                              <span className="sub">{user.total_logins || 0} logins</span>
+                              <div className="saas-activity-stats">
+                                <span>{user.totalDownloads || 0} DLs</span>
+                                <span className="sub">{user.total_logins || 0} logins</span>
+                              </div>
+                              <button 
+                                className="saas-btn-icon small" 
+                                onClick={() => loadUserDownloads(user.id, user.name, 'today')}
+                                title="View Downloads"
+                              >
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                  <polyline points="7 10 12 15 17 10"></polyline>
+                                  <line x1="12" y1="15" x2="12" y2="3"></line>
+                                </svg>
+                              </button>
                             </div>
                           </td>
                           <td>
@@ -702,8 +747,21 @@ function AdminPanel() {
                         <div className="saas-mobile-row">
                           <span className="saas-mobile-label">Activity</span>
                           <div className="saas-activity-cell">
-                            <span>{user.totalDownloads || 0} DLs</span>
-                            <span className="sub">{user.total_logins || 0} logins</span>
+                            <div className="saas-activity-stats">
+                              <span>{user.totalDownloads || 0} DLs</span>
+                              <span className="sub">{user.total_logins || 0} logins</span>
+                            </div>
+                            <button 
+                              className="saas-btn-icon small" 
+                              onClick={() => loadUserDownloads(user.id, user.name, 'today')}
+                              title="View Downloads"
+                            >
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="7 10 12 15 17 10"></polyline>
+                                <line x1="12" y1="15" x2="12" y2="3"></line>
+                              </svg>
+                            </button>
                           </div>
                         </div>
                       </div>
@@ -1011,6 +1069,77 @@ function AdminPanel() {
                   ))}
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showUserDownloadsModal && (
+        <div className="saas-modal-overlay">
+          <div className="saas-modal large">
+            <div className="saas-modal-header">
+              <h3>{selectedUserForDownloads.name}'s Downloads</h3>
+              <button onClick={() => { 
+                setShowUserDownloadsModal(false); 
+                setUserDownloads([]); 
+                setSelectedUserForDownloads({ id: null, name: '' });
+                setDownloadPeriod('today');
+              }}>✕</button>
+            </div>
+            <div className="saas-modal-content">
+              <div className="saas-download-filters">
+                <button 
+                  className={`saas-filter-btn ${downloadPeriod === 'today' ? 'active' : ''}`}
+                  onClick={() => changeDownloadPeriod('today')}
+                >
+                  Today
+                </button>
+                <button 
+                  className={`saas-filter-btn ${downloadPeriod === 'yesterday' ? 'active' : ''}`}
+                  onClick={() => changeDownloadPeriod('yesterday')}
+                >
+                  Yesterday
+                </button>
+                <button 
+                  className={`saas-filter-btn ${downloadPeriod === 'week' ? 'active' : ''}`}
+                  onClick={() => changeDownloadPeriod('week')}
+                >
+                  Week
+                </button>
+                <button 
+                  className={`saas-filter-btn ${downloadPeriod === '30days' ? 'active' : ''}`}
+                  onClick={() => changeDownloadPeriod('30days')}
+                >
+                  30 Days
+                </button>
+              </div>
+              <div className="saas-download-summary">
+                <span className="saas-download-count">{downloadStats.count} downloads</span>
+                <span className="saas-download-period">{downloadStats.period}</span>
+              </div>
+              <div className="saas-modal-content scrollable" style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--border)' }}>
+                {userDownloads.length === 0 ? (
+                  <p className="text-center text-muted">No downloads found for this period</p>
+                ) : (
+                  <div className="saas-downloads-list">
+                    {userDownloads.map(download => (
+                      <div key={download.id} className="saas-download-item">
+                        <div className="saas-download-item-info">
+                          <div className="saas-download-item-name">
+                            {download.name}
+                            {download.download_count > 1 && (
+                              <span className="saas-download-count-badge">+{download.download_count}</span>
+                            )}
+                          </div>
+                          <div className="saas-download-item-meta">
+                            <span className="saas-platform-badge">{download.platform_name}</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>

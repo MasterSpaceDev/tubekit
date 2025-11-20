@@ -559,6 +559,28 @@ function getUserLoginStats(userId) {
   return stats || { total_logins: 0, unique_devices: 0, unique_ips: 0 }
 }
 
+function getUserDownloadsByDateRange(userId, startDateExpr, endDateExpr) {
+  // Note: startDateExpr and endDateExpr are SQL expressions (not parameters) for date calculations
+  // We need to use string interpolation for the date expressions but parameterize the userId
+  const query = `
+    SELECT
+      s.id,
+      s.name,
+      p.name AS platform_name,
+      COUNT(dl.id) AS download_count,
+      GROUP_CONCAT(DISTINCT dl.episode_date) AS episode_dates
+    FROM download_logs dl
+    JOIN serials s ON dl.serial_id = s.id
+    JOIN platforms p ON s.platform_id = p.id
+    WHERE dl.user_id = ?
+      AND dl.downloaded_at >= ${startDateExpr}
+      AND dl.downloaded_at < ${endDateExpr}
+    GROUP BY s.id, s.name, p.name
+    ORDER BY download_count DESC, s.name
+  `
+  return db.prepare(query).all(userId)
+}
+
 module.exports = {
   db,
   getSerials,
@@ -596,5 +618,6 @@ module.exports = {
   updateUserPlanDays,
   extendUserPlanDays,
   isUserPlanExpired,
-  approveUserWithPlan
+  approveUserWithPlan,
+  getUserDownloadsByDateRange
 }

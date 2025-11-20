@@ -36,7 +36,8 @@ const {
   updateUserPlanDays,
   extendUserPlanDays,
   isUserPlanExpired,
-  approveUserWithPlan
+  approveUserWithPlan,
+  getUserDownloadsByDateRange
 } = require('./db')
 
 const app = express()
@@ -428,6 +429,55 @@ app.get('/api/admin/users/:id/serials', (req, res) => {
     const serials = getUserSerialsByUserId(userId)
     res.json({ serials })
   } catch (e) {
+    res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
+app.get('/api/admin/users/:id/downloads', (req, res) => {
+  try {
+    const admin = verifyAdmin(req)
+    if (!admin) return res.status(401).json({ error: 'Unauthorized' })
+    const userId = Number(req.params.id)
+    if (!userId) return res.status(400).json({ error: 'Invalid user id' })
+    
+    const { period } = req.query || {}
+    
+    // Import timezone constants from db.js logic
+    const PAKISTAN_TZ_PLUS = '+5 hour'
+    const PAKISTAN_TZ_MINUS = '-5 hour'
+    const todayStart = `datetime('now', '${PAKISTAN_TZ_PLUS}', 'start of day', '${PAKISTAN_TZ_MINUS}')`
+    const tomorrowStart = `datetime('now', '${PAKISTAN_TZ_PLUS}', 'start of day', '+1 day', '${PAKISTAN_TZ_MINUS}')`
+    const yesterdayStart = `datetime('now', '${PAKISTAN_TZ_PLUS}', 'start of day', '-1 day', '${PAKISTAN_TZ_MINUS}')`
+    const lastWeekStart = `datetime('now', '${PAKISTAN_TZ_PLUS}', 'start of day', '-7 day', '${PAKISTAN_TZ_MINUS}')`
+    const last30DaysStart = `datetime('now', '${PAKISTAN_TZ_PLUS}', 'start of day', '-30 day', '${PAKISTAN_TZ_MINUS}')`
+    
+    let startDate, endDate, periodName
+    switch (period) {
+      case 'yesterday':
+        startDate = yesterdayStart
+        endDate = todayStart
+        periodName = 'Yesterday'
+        break
+      case 'week':
+        startDate = lastWeekStart
+        endDate = tomorrowStart
+        periodName = 'Last 7 Days'
+        break
+      case '30days':
+        startDate = last30DaysStart
+        endDate = tomorrowStart
+        periodName = 'Last 30 Days'
+        break
+      default: // today
+        startDate = todayStart
+        endDate = tomorrowStart
+        periodName = 'Today'
+    }
+    
+    const downloads = getUserDownloadsByDateRange(userId, startDate, endDate)
+    res.json({ downloads, period: periodName, count: downloads.reduce((sum, d) => sum + d.download_count, 0) })
+  } catch (e) {
+    console.error('Error fetching user downloads:', e)
     res.status(500).json({ error: 'Internal server error' })
   }
 })
