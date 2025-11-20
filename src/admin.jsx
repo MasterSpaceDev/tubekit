@@ -747,7 +747,11 @@ function AdminPanel() {
                     <tr>
                       <th>Serial Name</th>
                       <th>Platform</th>
-                      <th>Total Downloads</th>
+                      <th>Today</th>
+                      <th>Yesterday</th>
+                      <th>7 Days</th>
+                      <th>30 Days</th>
+                      <th className="text-right font-bold">Total</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -757,7 +761,11 @@ function AdminPanel() {
                         <td>
                           <span className="saas-platform-badge">{serial.platform_name}</span>
                         </td>
-                        <td>{serial.totalDownloads || 0}</td>
+                        <td>{serial.downloadsToday || 0}</td>
+                        <td>{serial.downloadsYesterday || 0}</td>
+                        <td>{serial.downloadsLast7Days || 0}</td>
+                        <td>{serial.downloadsLast30Days || 0}</td>
+                        <td className="text-right font-bold">{serial.totalDownloads || 0}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -784,18 +792,33 @@ function AdminPanel() {
               {/* Mobile Card View */}
               <div className="saas-mobile-cards">
                 {serials.slice(serialsPage * 30, (serialsPage + 1) * 30).map(serial => (
-                  <div key={serial.id} className="saas-mobile-card">
+                  <div key={serial.id} className="saas-mobile-card saas-serial-card">
                     <div className="saas-mobile-card-header">
-                      <span className="saas-user-name">{serial.name}</span>
-                    </div>
-                    <div className="saas-mobile-card-body">
-                      <div className="saas-mobile-row">
-                        <span className="saas-mobile-label">Platform</span>
+                      <div>
+                        <span className="saas-user-name">{serial.name}</span>
                         <span className="saas-platform-badge">{serial.platform_name}</span>
                       </div>
-                      <div className="saas-mobile-row">
-                        <span className="saas-mobile-label">Downloads</span>
-                        <span>{serial.totalDownloads || 0}</span>
+                    </div>
+                    <div className="saas-serial-stats-grid">
+                      <div className="saas-stat-item">
+                        <span className="saas-stat-label">Today</span>
+                        <span className="saas-stat-value">{serial.downloadsToday || 0}</span>
+                      </div>
+                      <div className="saas-stat-item">
+                        <span className="saas-stat-label">Yesterday</span>
+                        <span className="saas-stat-value">{serial.downloadsYesterday || 0}</span>
+                      </div>
+                      <div className="saas-stat-item">
+                        <span className="saas-stat-label">7 Days</span>
+                        <span className="saas-stat-value">{serial.downloadsLast7Days || 0}</span>
+                      </div>
+                      <div className="saas-stat-item">
+                        <span className="saas-stat-label">30 Days</span>
+                        <span className="saas-stat-value">{serial.downloadsLast30Days || 0}</span>
+                      </div>
+                      <div className="saas-stat-item saas-stat-total">
+                        <span className="saas-stat-label">Total</span>
+                        <span className="saas-stat-value">{serial.totalDownloads || 0}</span>
                       </div>
                     </div>
                   </div>

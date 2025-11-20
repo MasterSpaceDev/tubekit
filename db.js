@@ -54,6 +54,7 @@ db.exec(`
     serial_id TEXT NOT NULL,
     user_id INTEGER NOT NULL,
     download_type TEXT DEFAULT 'original',
+    episode_date TEXT,
     downloaded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (serial_id) REFERENCES serials(id),
     FOREIGN KEY (user_id) REFERENCES users(id)
@@ -98,6 +99,7 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_download_logs_serial ON download_logs(serial_id);
   CREATE INDEX IF NOT EXISTS idx_download_logs_user ON download_logs(user_id);
   CREATE INDEX IF NOT EXISTS idx_download_logs_downloaded_at ON download_logs(downloaded_at);
+  CREATE INDEX IF NOT EXISTS idx_download_logs_episode ON download_logs(serial_id, user_id, episode_date);
   CREATE INDEX IF NOT EXISTS idx_user_serials_user ON user_serials(user_email);
   CREATE INDEX IF NOT EXISTS idx_user_serials_serial ON user_serials(serial_id);
   CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token);
@@ -112,6 +114,28 @@ try {
   if (!planExpiryColumn) {
     db.exec('ALTER TABLE users ADD COLUMN plan_expiry_date TEXT')
     console.log('Added plan_expiry_date column to users table')
+  }
+} catch (migrationError) {
+  console.error('Schema migration error (non-critical):', migrationError.message)
+}
+
+try {
+  const downloadLogsInfo = db.prepare("PRAGMA table_info(download_logs)").all()
+  const episodeDateColumn = downloadLogsInfo.find(col => col.name === 'episode_date')
+  if (!episodeDateColumn) {
+    db.exec('ALTER TABLE download_logs ADD COLUMN episode_date TEXT')
+    console.log('Added episode_date column to download_logs table')
+  }
+} catch (migrationError) {
+  console.error('Schema migration error (non-critical):', migrationError.message)
+}
+
+try {
+  const indexes = db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='download_logs'").all()
+  const episodeIndex = indexes.find(idx => idx.name === 'idx_download_logs_episode')
+  if (!episodeIndex) {
+    db.exec('CREATE INDEX IF NOT EXISTS idx_download_logs_episode ON download_logs(serial_id, user_id, episode_date)')
+    console.log('Added episode index to download_logs table')
   }
 } catch (migrationError) {
   console.error('Schema migration error (non-critical):', migrationError.message)
@@ -169,9 +193,28 @@ function getPendingQueueItems() {
 }
 
 function logDownload(serialId, userId, downloadType = 'original') {
-  return db.prepare(
-    'INSERT INTO download_logs (serial_id, user_id, download_type) VALUES (?, ?, ?)'
-  ).run(serialId, userId, downloadType)
+  // Get the serial to check its current episode date
+  const serial = getSerialById(serialId)
+  if (!serial) {
+    throw new Error('Serial not found')
+  }
+  
+  const episodeDate = serial.date || 'Unknown'
+  
+  // Check if user has already downloaded this episode
+  const existingDownload = db.prepare(
+    'SELECT id FROM download_logs WHERE serial_id = ? AND user_id = ? AND episode_date = ?'
+  ).get(serialId, userId, episodeDate)
+  
+  // Only log if this is a new episode download for this user
+  if (!existingDownload) {
+    return db.prepare(
+      'INSERT INTO download_logs (serial_id, user_id, download_type, episode_date) VALUES (?, ?, ?, ?)'
+    ).run(serialId, userId, downloadType, episodeDate)
+  }
+  
+  // Return a result indicating no new log was created (duplicate)
+  return { changes: 0, lastInsertRowid: null }
 }
 
 const PAKISTAN_TZ_PLUS = '+5 hour'
@@ -179,7 +222,9 @@ const PAKISTAN_TZ_MINUS = '-5 hour'
 
 const todayStart = `datetime('now', '${PAKISTAN_TZ_PLUS}', 'start of day', '${PAKISTAN_TZ_MINUS}')`
 const tomorrowStart = `datetime('now', '${PAKISTAN_TZ_PLUS}', 'start of day', '+1 day', '${PAKISTAN_TZ_MINUS}')`
+const yesterdayStart = `datetime('now', '${PAKISTAN_TZ_PLUS}', 'start of day', '-1 day', '${PAKISTAN_TZ_MINUS}')`
 const lastWeekStart = `datetime('now', '${PAKISTAN_TZ_PLUS}', 'start of day', '-7 day', '${PAKISTAN_TZ_MINUS}')`
+const last30DaysStart = `datetime('now', '${PAKISTAN_TZ_PLUS}', 'start of day', '-30 day', '${PAKISTAN_TZ_MINUS}')`
 
 function getDownloadOverview() {
   return db.prepare(`
@@ -212,10 +257,20 @@ function getSerialDownloadStats() {
             THEN 1 ELSE 0
           END), 0) AS downloadsToday,
       COALESCE(SUM(CASE
+            WHEN dl.downloaded_at >= ${yesterdayStart}
+             AND dl.downloaded_at < ${todayStart}
+            THEN 1 ELSE 0
+          END), 0) AS downloadsYesterday,
+      COALESCE(SUM(CASE
             WHEN dl.downloaded_at >= ${lastWeekStart}
              AND dl.downloaded_at < ${tomorrowStart}
             THEN 1 ELSE 0
-          END), 0) AS downloadsLastWeek
+          END), 0) AS downloadsLast7Days,
+      COALESCE(SUM(CASE
+            WHEN dl.downloaded_at >= ${last30DaysStart}
+             AND dl.downloaded_at < ${tomorrowStart}
+            THEN 1 ELSE 0
+          END), 0) AS downloadsLast30Days
     FROM serials s
     JOIN platforms p ON s.platform_id = p.id
     LEFT JOIN download_logs dl ON dl.serial_id = s.id
