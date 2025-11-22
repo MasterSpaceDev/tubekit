@@ -260,11 +260,12 @@ app.get('/api/serials/available', (req, res) => {
     const user = verifyAuth(req)
     if (!user) return res.status(401).json({ error: 'Unauthorized' })
     if (user.expired) return res.status(403).json({ error: 'Plan expired' })
-    // Return all serials in database for the "Add Serial" modal
     const allSerials = getAllAvailableSerials()
-    // Mark which serials the user has already added
     const serialsWithStatus = allSerials.map(serial => ({
-      ...serial,
+      id: serial.id,
+      name: serial.name,
+      platform_name: serial.platform_name,
+      platform_slug: serial.platform_slug,
       isAdded: isSerialAddedByUser(user.email, serial.id)
     }))
     res.json({ serials: serialsWithStatus })
